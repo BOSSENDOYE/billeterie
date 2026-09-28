@@ -1,4 +1,4 @@
-# Déploiement sur le VPS Hostinger — billet.bouticksen.com
+# Déploiement sur le VPS Hostinger — billet.cml-sst.com
 
 Architecture :
 
@@ -13,13 +13,13 @@ Les ports 1654, 1655 et 1657 n'écoutent que sur `127.0.0.1` : ils ne sont pas a
 
 ## 1. DNS (hPanel Hostinger)
 
-Domaines → bouticksen.com → DNS / Nameservers → ajouter :
+Domaines → cml-sst.com → DNS / Nameservers → ajouter :
 
 | Type | Nom | Valeur | TTL |
 | --- | --- | --- | --- |
 | A | `billet` | adresse IP du VPS | 3600 |
 
-Vérifier (peut prendre quelques minutes) : `ping billet.bouticksen.com`
+Vérifier (peut prendre quelques minutes) : `ping billet.cml-sst.com`
 
 ## 2. Docker sur le VPS (si absent)
 
@@ -68,8 +68,8 @@ Les redémarrages suivants ne touchent pas aux ventes.
 ## 6. Nginx du VPS
 
 ```bash
-sudo cp deploy/nginx/billet.bouticksen.com.conf /etc/nginx/sites-available/billet.bouticksen.com
-sudo ln -s /etc/nginx/sites-available/billet.bouticksen.com /etc/nginx/sites-enabled/
+sudo cp deploy/nginx/billet.cml-sst.com.conf /etc/nginx/sites-available/billet.cml-sst.com
+sudo ln -s /etc/nginx/sites-available/billet.cml-sst.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -77,17 +77,17 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx   # si absent
-sudo certbot --nginx -d billet.bouticksen.com
+sudo certbot --nginx -d billet.cml-sst.com
 ```
 
-Le site est alors sur **https://billet.bouticksen.com**.
+Le site est alors sur **https://billet.cml-sst.com**.
 
 | Page | Adresse |
 | --- | --- |
-| Billetterie | https://billet.bouticksen.com |
-| Scanner (équipe) | https://billet.bouticksen.com/scan |
-| Tableau de bord | https://billet.bouticksen.com/admin |
-| Admin Django | https://billet.bouticksen.com/django-admin/ (`sudo docker compose exec backend python manage.py createsuperuser`) |
+| Billetterie | https://billet.cml-sst.com |
+| Scanner (équipe) | https://billet.cml-sst.com/scan |
+| Tableau de bord | https://billet.cml-sst.com/admin |
+| Admin Django | https://billet.cml-sst.com/django-admin/ (`sudo docker compose exec backend python manage.py createsuperuser`) |
 
 ## Mises à jour
 

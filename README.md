@@ -49,7 +49,7 @@ Tests : `cd backend && .venv\Scripts\python manage.py test billetterie`
 
 ## Déploiement
 
-Docker + Nginx sur le VPS Hostinger (billet.bouticksen.com) : voir [DEPLOIEMENT.md](DEPLOIEMENT.md).
+Docker + Nginx sur le VPS Hostinger (billet.cml-sst.com) : voir [DEPLOIEMENT.md](DEPLOIEMENT.md).
 
 ## Passage en production
 
