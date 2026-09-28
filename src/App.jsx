@@ -20,10 +20,10 @@ function Footer() {
 
 export default function App() {
   const { pathname } = useLocation()
-  // Le scanner du personnel est une page autonome, sans l'en-tête ni le pied de page du site
-  const externe = pathname.startsWith('/scan')
-  // Pas de musique pour l'équipe (scanner, tableau de bord)
+  // Pages de l'équipe (scanner, tableau de bord) : autonomes, accessibles uniquement par leur lien,
+  // sans l'en-tête ni le pied de page du site public, et sans musique
   const pageEquipe = pathname.startsWith('/scan') || pathname.startsWith('/admin')
+  const externe = pageEquipe
 
   return (
     <div className="flex min-h-dvh flex-col">

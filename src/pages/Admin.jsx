@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { IconScan, IconSearch } from '../components/Icons'
 import PaiementsAVerifier from '../components/PaiementsAVerifier'
-import { btn, ErrorState, PageLoader, input } from '../components/ui'
+import { btn, ErrorState, Logo, PageLoader, input } from '../components/ui'
 import { api, usePolling } from '../lib/api'
 import { dateCourte, dateEvenement, formatPrix, numeroFormat } from '../lib/format'
 
@@ -65,7 +65,10 @@ export default function Admin() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-6">
+      <div className="mb-6 border-b border-line pb-4">
+        <Logo />
+      </div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">Tableau de bord</p>

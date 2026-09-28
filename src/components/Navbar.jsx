@@ -1,12 +1,11 @@
 import { NavLink } from 'react-router-dom'
 import { useMesBillets } from '../lib/mesBillets'
-import { IconChart, IconTicket } from './Icons'
+import { IconTicket } from './Icons'
 import { Logo } from './ui'
 
 const liens = [
   { to: '/', label: 'Billetterie', icon: IconTicket },
   { to: '/mes-billets', label: 'Mes billets', icon: IconTicket, compteur: true },
-  { to: '/admin', label: 'Tableau de bord', icon: IconChart },
 ]
 
 export default function Navbar() {
