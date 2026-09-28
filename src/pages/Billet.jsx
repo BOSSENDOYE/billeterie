@@ -1,8 +1,10 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import ArtistePhoto from '../components/ArtistePhoto'
 import { IconCheck, IconDownload } from '../components/Icons'
-import { btn, ErrorState, PageLoader } from '../components/ui'
+import { btn, ErrorState, PageLoader, Spinner } from '../components/ui'
+import { enregistrerImageBillet, genererImageBillet } from '../lib/billetImage'
 import { api, usePolling } from '../lib/api'
 import { dateCourte, dateEvenement, formatPrix, numeroFormat } from '../lib/format'
 
@@ -20,6 +22,30 @@ export default function Billet() {
   const { state } = useLocation()
   // Rafraîchi pour afficher « Utilisé » dès que le billet est scanné à l'entrée
   const { data, error } = usePolling(() => api.ticket(id), [id], 5000)
+  const billetRef = useRef(null)
+  const [enregistrement, setEnregistrement] = useState(false)
+  const [message, setMessage] = useState(null)
+  const imageRef = useRef(null) // image du billet préparée à l'avance
+
+  // Prépare l'image dès l'affichage (après l'animation d'entrée) et à chaque changement de statut
+  const statut = data?.ticket.statut
+  useEffect(() => {
+    if (!statut) return
+    imageRef.current = null
+    let annule = false
+    const t = setTimeout(async () => {
+      try {
+        const blob = await genererImageBillet(billetRef.current)
+        if (!annule) imageRef.current = blob
+      } catch {
+        /* sera regénérée au clic */
+      }
+    }, 900)
+    return () => {
+      annule = true
+      clearTimeout(t)
+    }
+  }, [statut])
 
   if (error && !data) {
     return <ErrorState message={error.status === 404 ? 'Billet introuvable.' : error.message} action={<Link to="/" className={btn.ghost}>Retour à la billetterie</Link>} />
@@ -29,6 +55,24 @@ export default function Billet() {
   const { ticket, evenement: ev } = data
   const d = dateEvenement(ev.date)
   const utilise = ticket.statut === 'utilise'
+
+  async function enregistrer() {
+    setMessage(null)
+    const nom = `billet-${String(ticket.numero).padStart(3, '0')}-${ev.artiste.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`
+    try {
+      let blob = imageRef.current
+      if (!blob) {
+        setEnregistrement(true)
+        blob = imageRef.current = await genererImageBillet(billetRef.current)
+      }
+      const r = await enregistrerImageBillet(blob, nom)
+      if (r === 'telecharge') setMessage({ ok: true, texte: 'Billet téléchargé. Sur Android, il apparaît dans la Galerie (dossier Téléchargements).' })
+    } catch (e) {
+      setMessage({ ok: false, texte: e.message })
+    } finally {
+      setEnregistrement(false)
+    }
+  }
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
@@ -43,7 +87,7 @@ export default function Billet() {
       )}
 
       {/* Billet horizontal : partie principale + souche QR */}
-      <article className="print-ticket relative flex animate-pop overflow-hidden rounded-2xl bg-gradient-gold p-px shadow-2xl shadow-gold/10 sm:rounded-3xl">
+      <article ref={billetRef} className="print-ticket relative flex animate-pop overflow-hidden rounded-2xl bg-gradient-gold p-px shadow-2xl shadow-gold/10 sm:rounded-3xl">
         <div className="flex w-full overflow-hidden rounded-[15px] bg-ink sm:rounded-[23px]">
           <div className="relative min-h-56 flex-1 overflow-hidden sm:min-h-80">
             <ArtistePhoto src={ev.image} alt={ev.artiste} />
@@ -117,11 +161,18 @@ export default function Billet() {
       </dl>
 
       <div className="no-print mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-        <button onClick={() => window.print()} className={btn.gold}>
-          <IconDownload /> Télécharger / imprimer le billet
+        <button onClick={enregistrer} disabled={enregistrement} className={btn.gold}>
+          {enregistrement ? <Spinner className="h-5 w-5 border-ink/25 border-t-ink" /> : <IconDownload />}
+          Enregistrer le billet dans mes photos
         </button>
         <Link to="/" className={btn.ghost}>Acheter un autre billet</Link>
       </div>
+      <p className="no-print mt-3 text-center text-xs text-muted">
+        Sur iPhone, choisissez « Enregistrer l'image » dans le menu qui s'ouvre : le billet arrive dans la Pellicule.
+      </p>
+      {message && (
+        <p className={`no-print mt-3 animate-fade-in text-center text-sm ${message.ok ? 'text-emerald-300' : 'text-red-400'}`}>{message.texte}</p>
+      )}
     </main>
   )
 }
