@@ -1,0 +1,186 @@
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import ArtistePhoto from '../components/ArtistePhoto'
+import { IconBolt, IconCalendar, IconClock, IconPin, IconQr, IconShield } from '../components/Icons'
+import { btn, ErrorState, input, PageLoader, Spinner } from '../components/ui'
+import { api, usePolling } from '../lib/api'
+import { dateEvenement, formatPrix } from '../lib/format'
+import { PAIEMENT_EN_COURS_KEY } from './Paiement'
+
+const GARANTIES = [
+  { icon: IconShield, titre: 'Paiement sécurisé', texte: 'Réglez avec Wave, sans frais ni carte bancaire.' },
+  { icon: IconQr, titre: 'Billet infalsifiable', texte: 'Chaque QR code est signé et ne fonctionne qu’une seule fois.' },
+  { icon: IconBolt, titre: 'Réception immédiate', texte: 'Votre e-billet s’affiche dès le paiement confirmé.' },
+]
+
+function Meta({ icon: Icon, children }) {
+  return (
+    <span className="flex items-center gap-2 text-sm text-cream/85 sm:text-base">
+      <Icon className="h-4 w-4 shrink-0 text-gold sm:h-5 sm:w-5" />
+      {children}
+    </span>
+  )
+}
+
+export default function Accueil() {
+  const { data, error, reload } = usePolling(api.evenement, [], 8000)
+  const navigate = useNavigate()
+  const [nom, setNom] = useState('')
+  const [tel, setTel] = useState('')
+  const [erreur, setErreur] = useState('')
+  const [envoi, setEnvoi] = useState(false)
+  const [enCours] = useState(() => {
+    try {
+      return localStorage.getItem(PAIEMENT_EN_COURS_KEY)
+    } catch {
+      return null
+    }
+  })
+
+  if (error && !data) return <ErrorState message={error.message} action={<button onClick={reload} className={btn.ghost}>Réessayer</button>} />
+  if (!data) return <PageLoader />
+
+  const ev = data.evenement
+  const d = dateEvenement(ev.date)
+  const restants = data.restants
+  const pctVendus = ((ev.capacite - restants) / ev.capacite) * 100
+  const complet = restants === 0
+
+  async function payer(e) {
+    e.preventDefault()
+    if (nom.trim().length < 2) return setErreur('Veuillez saisir votre nom complet.')
+    if (tel.replace(/\D/g, '').length !== 9) return setErreur('Le numéro doit comporter 9 chiffres.')
+    setErreur('')
+    setEnvoi(true)
+    try {
+      const { paiement } = await api.creerPaiement(nom.trim(), tel)
+      if (data.paiement_simule) {
+        // Mode démonstration : le paiement Wave est considéré comme effectué
+        await new Promise((r) => setTimeout(r, 1500))
+        const { paiement: confirme } = await api.simulerPaiement(paiement.reference)
+        return navigate(`/billet/${confirme.ticket_id}`, { state: { nouveau: true } })
+      }
+      navigate(`/paiement/${paiement.reference}`)
+    } catch (err) {
+      setErreur(err.message)
+      setEnvoi(false)
+    }
+  }
+
+  return (
+    <main>
+      {/* Hero */}
+      <section className="relative isolate overflow-hidden border-b border-line/60">
+        <ArtistePhoto src={ev.image} alt={ev.artiste} className="-z-10 brightness-110" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-ink via-ink/30 to-transparent" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-ink/75 via-ink/20 to-transparent" />
+
+        <div className="mx-auto max-w-6xl px-4 pb-14 pt-20 sm:pb-20 sm:pt-32">
+          <p className="animate-fade-in text-xs font-semibold uppercase tracking-[0.35em] text-gold">Concert live · {ev.ville}</p>
+          <h1 className="mt-4 max-w-3xl animate-fade-in font-display text-5xl font-extrabold leading-[0.95] sm:text-7xl">
+            <span className="text-gradient-gold">{ev.artiste}</span>
+          </h1>
+          <div className="mt-8 flex animate-fade-in flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-8">
+            <Meta icon={IconCalendar}>{d.longue}</Meta>
+            <Meta icon={IconClock}>{d.heure}</Meta>
+            <Meta icon={IconPin}>{ev.lieu}, {ev.ville}</Meta>
+          </div>
+        </div>
+      </section>
+
+      {enCours && (
+        <div className="mx-auto max-w-6xl px-4 pt-6">
+          <Link to={`/paiement/${enCours}`} className="flex animate-fade-in items-center justify-between gap-3 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-sm transition hover:bg-gold/15">
+            <span>Vous avez un paiement en cours <span className="font-mono text-gold-light">{enCours}</span></span>
+            <span className="font-semibold text-gold-light">Reprendre →</span>
+          </Link>
+        </div>
+      )}
+
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 lg:grid-cols-[1fr_420px] lg:py-14">
+        {/* Informations */}
+        <section className="order-2 space-y-8 lg:order-1">
+          <div>
+            <h2 className="font-display text-2xl font-bold">L'événement</h2>
+            <p className="mt-3 max-w-prose leading-relaxed text-muted">
+              {ev.artiste} investit le {ev.lieu.toLowerCase()} de {ev.ville} pour une soirée unique.
+              Places limitées à {ev.capacite} personnes, placement libre. Le billet est nominatif :
+              présentez votre QR code à l'entrée, depuis votre téléphone ou imprimé.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {GARANTIES.map(({ icon: Icon, titre, texte }) => (
+              <div key={titre} className="rounded-2xl border border-line bg-surface p-5">
+                <Icon className="h-6 w-6 text-gold" />
+                <p className="mt-3 font-semibold">{titre}</p>
+                <p className="mt-1 text-sm text-muted">{texte}</p>
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <h2 className="font-display text-2xl font-bold">Comment ça marche</h2>
+            <ol className="mt-4 grid gap-4 sm:grid-cols-3">
+              {['Renseignez votre nom et votre numéro Wave', 'Validez le paiement sur Wave', 'Recevez votre billet avec son QR code'].map((etape, i) => (
+                <li key={etape} className="flex gap-3">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-gold/40 font-display font-bold text-gold">{i + 1}</span>
+                  <span className="pt-1 text-sm text-cream/85">{etape}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        {/* Achat */}
+        <aside className="order-1 lg:order-2 lg:-mt-32">
+          <div className="sticky top-24 animate-fade-in rounded-2xl border border-gold/25 bg-surface/95 p-6 shadow-2xl shadow-black/60 backdrop-blur sm:p-7">
+            <div className="flex items-baseline justify-between">
+              <p className="text-sm text-muted">Entrée générale</p>
+              <p className="font-display text-3xl font-bold text-gold-light">{formatPrix(ev.prix)}</p>
+            </div>
+
+            <div className="mt-5">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted">Places restantes</span>
+                <span className="font-semibold tabular-nums">
+                  <span className={restants < 30 ? 'text-red-400' : 'text-gold-light'}>{restants}</span>
+                  <span className="text-muted"> / {ev.capacite}</span>
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
+                <div className="h-full rounded-full bg-gradient-gold transition-all duration-700" style={{ width: `${pctVendus}%` }} />
+              </div>
+            </div>
+
+            <form onSubmit={payer} className="mt-6 space-y-4">
+              <label className="block">
+                <span className="text-sm font-medium text-cream/90">Nom complet</span>
+                <input value={nom} onChange={(e) => setNom(e.target.value)} autoComplete="name" placeholder="Prénom Nom" className={`${input} mt-1.5`} />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-cream/90">Numéro Wave</span>
+                <div className="mt-1.5 flex">
+                  <span className="grid place-items-center rounded-l-xl border border-r-0 border-line bg-surface-2 px-3.5 text-sm text-muted">+221</span>
+                  <input value={tel} onChange={(e) => setTel(e.target.value)} inputMode="tel" autoComplete="tel-national" placeholder="77 123 45 67" className={`${input} rounded-l-none`} />
+                </div>
+              </label>
+              {erreur && <p className="animate-fade-in text-sm text-red-400">{erreur}</p>}
+
+              <button disabled={complet || envoi} className="flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40">
+                {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : complet ? 'Complet' : <>Payer avec <span className="font-extrabold tracking-tight">Wave</span></>}
+              </button>
+              {envoi && data.paiement_simule && <p className="animate-fade-in text-center text-sm text-wave">Paiement Wave en cours…</p>}
+              <p className="text-center text-xs text-muted">Billet nominatif, non remboursable.</p>
+              {data.paiement_simule && (
+                <p className="rounded-lg border border-gold/30 bg-gold/5 px-3 py-2 text-center text-xs text-gold-light">
+                  Mode démonstration : le paiement est validé automatiquement, aucun débit Wave.
+                </p>
+              )}
+            </form>
+          </div>
+        </aside>
+      </div>
+    </main>
+  )
+}

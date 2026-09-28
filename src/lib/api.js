@@ -1,0 +1,109 @@
+// Client de l'API Django (proxy Vite : /api -> http://127.0.0.1:8000)
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+const STAFF_KEY = 'billetterie_staff_code'
+
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message)
+    this.status = status
+  }
+}
+
+export const staffCode = {
+  get: () => {
+    try {
+      return sessionStorage.getItem(STAFF_KEY) || ''
+    } catch {
+      return ''
+    }
+  },
+  set: (code) => {
+    try {
+      code ? sessionStorage.setItem(STAFF_KEY, code) : sessionStorage.removeItem(STAFF_KEY)
+    } catch {
+      /* stockage indisponible : l'utilisateur devra se reconnecter */
+    }
+    window.dispatchEvent(new Event('staff:change'))
+  },
+}
+
+async function request(path, { method = 'GET', body, staff = false, code } = {}) {
+  const headers = { Accept: 'application/json' }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (staff) headers['X-Staff-Code'] = code ?? staffCode.get()
+
+  let res
+  try {
+    res = await fetch(`/api/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  } catch {
+    throw new ApiError('Serveur injoignable. Le backend Django est-il démarré ?', 0)
+  }
+  const data = await res.json().catch(() => null)
+  if (data === null) {
+    // Réponse HTML : le serveur Vite ne relaie pas /api vers Django (proxy absent ou mauvais port)
+    throw new ApiError(
+      `API injoignable (erreur ${res.status}) : ouvrez http://localhost:5173 et vérifiez que Django tourne sur le port 8000.`,
+      res.status,
+    )
+  }
+  if (!res.ok) {
+    if (res.status === 401 && staff) staffCode.set('')
+    throw new ApiError(data.erreur || `Erreur ${res.status}`, res.status)
+  }
+  return data
+}
+
+export const api = {
+  evenement: () => request('evenement'),
+  creerPaiement: (nom, telephone) => request('paiements', { method: 'POST', body: { nom, telephone } }),
+  paiement: (ref) => request(`paiements/${ref}`),
+  simulerPaiement: (ref) => request(`paiements/${ref}/simuler`, { method: 'POST', body: {} }),
+  declarerPaiement: (ref) => request(`paiements/${ref}/declarer`, { method: 'POST', body: {} }),
+  ticket: (id) => request(`tickets/${id}`),
+
+  login: (code) => request('staff/login', { method: 'POST', body: {}, staff: true, code }),
+  scan: (qr) => request('staff/scan', { method: 'POST', body: { qr }, staff: true }),
+  scans: () => request('staff/scans', { staff: true }),
+  stats: () => request('staff/stats', { staff: true }),
+  tickets: (statut, q) => request(`staff/tickets?${new URLSearchParams({ statut, q })}`, { staff: true }),
+  paiements: (statut) => request(`staff/paiements?${new URLSearchParams({ statut })}`, { staff: true }),
+  validerPaiement: (ref) => request(`staff/paiements/${ref}/valider`, { method: 'POST', body: {}, staff: true }),
+  rejeterPaiement: (ref) => request(`staff/paiements/${ref}/rejeter`, { method: 'POST', body: {}, staff: true }),
+}
+
+/**
+ * Charge une ressource et la rafraîchit périodiquement (synchro « temps réel »
+ * entre acheteurs, scanners et tableau de bord).
+ */
+export function usePolling(fetcher, deps = [], intervalMs = 4000) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const fetcherRef = useRef(fetcher)
+  fetcherRef.current = fetcher
+
+  const reload = useCallback(async () => {
+    try {
+      const d = await fetcherRef.current()
+      setData(d)
+      setError(null)
+      return d
+    } catch (e) {
+      setError(e)
+    }
+  }, [])
+
+  useEffect(() => {
+    let actif = true
+    const tick = () => actif && document.visibilityState === 'visible' && reload()
+    reload()
+    const id = intervalMs ? setInterval(tick, intervalMs) : null
+    return () => {
+      actif = false
+      clearInterval(id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+
+  return { data, error, reload }
+}
