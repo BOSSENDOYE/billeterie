@@ -91,6 +91,24 @@ class ParcoursTest(TestCase):
         ref = self.creer()['reference']
         self.assertEqual(self.post(f'/api/staff/paiements/{ref}/valider', {}).status_code, 401)
 
+    def test_qr_compact(self):
+        ticket_id = self.acheter()
+        qr = self.client.get(f'/api/tickets/{ticket_id}').json()['ticket']['qr']
+        self.assertTrue(qr.startswith('B1.'))
+        self.assertLessEqual(len(qr), 42)  # tient dans un QR version 3 (29x29 modules)
+
+    def test_ancien_format_json_accepte(self):
+        from .models import signer
+        ticket_id = self.acheter()
+        ancien = json.dumps({'id': ticket_id, 'sig': signer(ticket_id)})
+        self.assertEqual(self.post('/api/staff/scan', {'qr': ancien}, **STAFF).json()['resultat'], 'valide')
+
+    def test_qr_compact_falsifie(self):
+        ticket_id = self.acheter()
+        qr = self.client.get(f'/api/tickets/{ticket_id}').json()['ticket']['qr']
+        faux = qr[:-3] + ('AAA' if not qr.endswith('AAA') else 'BBB')
+        self.assertEqual(self.post('/api/staff/scan', {'qr': faux}, **STAFF).json()['resultat'], 'invalide')
+
     def test_qr_falsifie(self):
         ticket_id = self.acheter()
         faux = json.dumps({'id': ticket_id, 'sig': '0' * 20})

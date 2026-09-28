@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import ArtistePhoto from '../components/ArtistePhoto'
-import { IconCheck, IconDownload } from '../components/Icons'
+import { IconCheck, IconDownload, IconQr } from '../components/Icons'
 import { btn, ErrorState, PageLoader, Spinner } from '../components/ui'
 import { enregistrerImageBillet, genererImageBillet } from '../lib/billetImage'
 import { api, usePolling } from '../lib/api'
@@ -17,6 +17,31 @@ function Champ({ label, children, className = '' }) {
   )
 }
 
+/** QR en plein écran sur fond blanc : grand et contrasté pour le scanner de l'entrée. */
+function QrPleinEcran({ ticket, total, onFermer }) {
+  const fermerRef = useRef(onFermer)
+  fermerRef.current = onFermer
+  useEffect(() => {
+    let verrou
+    navigator.wakeLock?.request('screen').then((v) => (verrou = v), () => {})
+    const echap = (e) => e.key === 'Escape' && fermerRef.current()
+    window.addEventListener('keydown', echap)
+    return () => {
+      verrou?.release().catch(() => {})
+      window.removeEventListener('keydown', echap)
+    }
+  }, [])
+
+  return (
+    <button onClick={onFermer} className="fixed inset-0 z-[70] flex animate-fade-in flex-col items-center justify-center bg-white p-4 text-center text-ink">
+      <QRCodeSVG value={ticket.qr} size={512} level="M" marginSize={4} fgColor="#000000" bgColor="#FFFFFF" className="h-auto w-[min(92vw,70vh)]" />
+      <span className="mt-4 block text-lg font-bold">{ticket.acheteur_nom}</span>
+      <span className="block font-mono text-sm text-neutral-600">Billet N° {numeroFormat(ticket.numero, total)}</span>
+      <span className="mt-6 block max-w-xs text-sm text-neutral-500">Montez la luminosité de l'écran au maximum. Touchez pour fermer.</span>
+    </button>
+  )
+}
+
 export default function Billet() {
   const { id } = useParams()
   const { state } = useLocation()
@@ -25,6 +50,7 @@ export default function Billet() {
   const billetRef = useRef(null)
   const [enregistrement, setEnregistrement] = useState(false)
   const [message, setMessage] = useState(null)
+  const [qrGrand, setQrGrand] = useState(false)
   const imageRef = useRef(null) // image du billet préparée à l'avance
 
   // Prépare l'image dès l'affichage (après l'animation d'entrée) et à chaque changement de statut
@@ -56,6 +82,8 @@ export default function Billet() {
   const d = dateEvenement(ev.date)
   const utilise = ticket.statut === 'utilise'
 
+  const fermerQr = () => setQrGrand(false)
+
   async function enregistrer() {
     setMessage(null)
     const nom = `billet-${String(ticket.numero).padStart(3, '0')}-${ev.artiste.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`
@@ -76,6 +104,7 @@ export default function Billet() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
+      {qrGrand && <QrPleinEcran ticket={ticket} total={ev.capacite} onFermer={fermerQr} />}
       {state?.nouveau && (
         <div className="no-print mb-6 flex animate-fade-in items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-500 text-ink"><IconCheck className="h-5 w-5" /></span>
@@ -135,8 +164,15 @@ export default function Billet() {
               <p className="text-[9px] uppercase tracking-[0.2em] text-muted sm:text-[10px]">Billet N°</p>
               <p className="font-mono text-sm font-bold text-gold-light sm:text-lg">{numeroFormat(ticket.numero, ev.capacite)}</p>
             </div>
-            <div className="relative w-full rounded-lg bg-white p-1.5 sm:rounded-xl sm:p-2.5">
-              <QRCodeSVG value={ticket.qr} size={200} level="M" fgColor="#0A0A0B" className={`h-auto w-full ${utilise ? 'opacity-20' : ''}`} />
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => !utilise && setQrGrand(true)}
+              onKeyDown={(e) => e.key === 'Enter' && !utilise && setQrGrand(true)}
+              aria-label="Afficher le QR code en grand"
+              className={`relative w-full rounded-lg bg-white p-0.5 sm:rounded-xl sm:p-1.5 ${utilise ? '' : 'cursor-zoom-in'}`}
+            >
+              <QRCodeSVG value={ticket.qr} size={200} level="M" marginSize={2} fgColor="#000000" bgColor="#FFFFFF" className={`h-auto w-full ${utilise ? 'opacity-20' : ''}`} />
               {utilise && (
                 <span className="absolute inset-0 grid place-items-center">
                   <span className="-rotate-12 rounded border-2 border-red-600 bg-white/80 px-1.5 text-[11px] font-black tracking-wider text-red-600 sm:border-[3px] sm:px-2 sm:text-base">UTILISÉ</span>
@@ -160,8 +196,14 @@ export default function Billet() {
         <p className="col-span-full truncate font-mono text-[10px] text-muted/50">Réf. {ticket.id}</p>
       </dl>
 
-      <div className="no-print mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
-        <button onClick={enregistrer} disabled={enregistrement} className={btn.gold}>
+      {!utilise && (
+        <button onClick={() => setQrGrand(true)} className={`${btn.gold} no-print mt-5 w-full py-4 text-base`}>
+          <IconQr /> Afficher mon QR code à l'entrée
+        </button>
+      )}
+
+      <div className="no-print mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
+        <button onClick={enregistrer} disabled={enregistrement} className={utilise ? btn.gold : btn.ghost}>
           {enregistrement ? <Spinner className="h-5 w-5 border-ink/25 border-t-ink" /> : <IconDownload />}
           Enregistrer le billet dans mes photos
         </button>

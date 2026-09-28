@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import json
@@ -55,7 +56,9 @@ class Ticket(models.Model):
 
     @property
     def qr_payload(self):
-        return json.dumps({'id': str(self.id), 'sig': self.signature}, separators=(',', ':'))
+        # Format compact « B1.<uuid>.<signature> » (~40 caractères) : QR à gros modules,
+        # lisible même affiché sur l'écran d'un autre téléphone
+        return f'{QR_PREFIXE}{_b64(self.id.bytes)}.{signer_court(self.id)}'
 
 
 def signer(ticket_id: str) -> str:
@@ -66,6 +69,40 @@ def signer(ticket_id: str) -> str:
 
 def signature_valide(ticket_id: str, sig: str) -> bool:
     return hmac.compare_digest(signer(ticket_id), sig or '')
+
+
+QR_PREFIXE = 'B1.'
+
+
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
+
+
+def signer_court(ticket_id: uuid.UUID) -> str:
+    """Signature HMAC-SHA256 tronquée à 80 bits, encodée en base64url (14 caractères)."""
+    key = settings.TICKET_SIGNING_KEY.encode()
+    return _b64(hmac.new(key, ticket_id.bytes, hashlib.sha256).digest()[:10])
+
+
+def lire_qr(contenu: str):
+    """Retourne l'identifiant du billet si le QR est authentique, sinon None.
+
+    Accepte le format compact « B1.… » et l'ancien format JSON {"id", "sig"}.
+    """
+    contenu = (contenu or '').strip()
+    if contenu.startswith(QR_PREFIXE):
+        try:
+            code_id, sig = contenu[len(QR_PREFIXE):].split('.')
+            ticket_id = uuid.UUID(bytes=base64.urlsafe_b64decode(code_id + '=' * (-len(code_id) % 4)))
+        except (ValueError, TypeError):
+            return None
+        return ticket_id if hmac.compare_digest(signer_court(ticket_id), sig) else None
+    try:
+        data = json.loads(contenu)
+        ticket_id, sig = str(data['id']), str(data['sig'])
+    except (ValueError, KeyError, TypeError):
+        return None
+    return ticket_id if signature_valide(ticket_id, sig) else None
 
 
 def reference_paiement():

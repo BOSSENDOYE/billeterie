@@ -1,12 +1,11 @@
 """Logique métier : vente, contrôle d'accès, données de démo."""
-import json
 import random
 from datetime import datetime, timedelta
 
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Evenement, Paiement, Scan, Ticket, signature_valide
+from .models import Evenement, Paiement, Scan, Ticket, lire_qr
 
 
 def evenement_actif():
@@ -49,14 +48,9 @@ def _invalide(raison):
 @transaction.atomic
 def scanner(contenu: str) -> dict:
     """Vérifie un QR code et le consomme. Le verrou empêche deux entrées simultanées."""
-    try:
-        data = json.loads(contenu)
-        ticket_id, sig = str(data['id']), str(data['sig'])
-    except (ValueError, KeyError, TypeError):
-        return _invalide('QR code non reconnu')
-
-    if not signature_valide(ticket_id, sig):
-        return _invalide('Signature falsifiée')
+    ticket_id = lire_qr(contenu)
+    if ticket_id is None:
+        return _invalide('QR code non reconnu ou falsifié')
 
     ticket = Ticket.objects.select_for_update().select_related('evenement').filter(pk=ticket_id).first()
     if ticket is None or ticket.statut == Ticket.Statut.DISPONIBLE:
