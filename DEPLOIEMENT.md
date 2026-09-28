@@ -51,7 +51,8 @@ python3 -c "import secrets; print(secrets.token_urlsafe(40))"
 ```
 
 - `STAFF_ACCESS_CODE` : le code du scanner et du tableau de bord (à communiquer à l'équipe).
-- `PAIEMENT_SIMULE=0` pour les vraies ventes (1 = démonstration, billet sans payer).
+- `PAIEMENT_SIMULE=1` (par défaut) : mode démonstration, « Payer avec Wave » donne le billet sans débit.
+  Mettre `PAIEMENT_SIMULE=0` pour les vraies ventes, puis `sudo docker compose up -d`.
 - Ne jamais committer ce fichier `.env`.
 
 ## 5. Lancer les conteneurs
