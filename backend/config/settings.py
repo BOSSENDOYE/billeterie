@@ -14,6 +14,15 @@ load_dotenv(BASE_DIR / '.env', override=True)
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dev-insecure-change-me')
 DEBUG = os.getenv('DJANGO_DEBUG', '1') == '1'
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,*').split(',')
+# Origines HTTPS autorisées pour les formulaires (admin Django derrière Nginx)
+CSRF_TRUSTED_ORIGINS = [o for o in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o]
+
+# Derrière le Nginx du VPS (HTTPS terminé par Nginx)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # Clé HMAC utilisée pour signer les QR codes (distincte de SECRET_KEY)
 TICKET_SIGNING_KEY = os.getenv('TICKET_SIGNING_KEY', SECRET_KEY)
@@ -67,7 +76,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         # Backend MySQL standard, avec tolérance pour MariaDB 10.4 (XAMPP)
-        'ENGINE': 'billetterie.db',
+        'ENGINE': os.getenv('DB_ENGINE', 'billetterie.db'),
         'NAME': os.getenv('DB_NAME', 'billetterie'),
         'USER': os.getenv('DB_USER', 'root'),
         'PASSWORD': os.getenv('DB_PASSWORD', ''),
@@ -90,6 +99,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 

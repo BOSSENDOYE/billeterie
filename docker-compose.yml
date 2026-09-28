@@ -1,0 +1,56 @@
+# Billetterie — billet.bouticksen.com
+# Ports publiés uniquement en local (127.0.0.1) : seul le Nginx du VPS est exposé à Internet.
+#   1654 -> web (site React + relais API)   <- cible du Nginx du VPS
+#   1655 -> backend Django / Gunicorn
+#   1657 -> base MariaDB
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      TZ: Africa/Dakar
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:1657:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_ENGINE: django.db.backends.mysql
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - static:/app/staticfiles
+    ports:
+      - "127.0.0.1:1655:8000"
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - backend
+    volumes:
+      - static:/app/staticfiles:ro
+    ports:
+      - "127.0.0.1:1654:80"
+
+volumes:
+  db_data:
+  static:

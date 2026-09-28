@@ -74,7 +74,7 @@ export default function Admin() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={copierLienScan} className={`${btn.ghost} py-2 text-sm`}><IconScan className="h-4 w-4" /> {copie ? 'Lien copié' : 'Copier le lien du scanner'}</button>
-          <a href={`http://${window.location.hostname}:8000/admin/`} target="_blank" rel="noreferrer" className={`${btn.ghost} py-2 text-sm`}>Admin Django</a>
+          <a href="/django-admin/" target="_blank" rel="noreferrer" className={`${btn.ghost} py-2 text-sm`}>Admin Django</a>
         </div>
       </div>
 

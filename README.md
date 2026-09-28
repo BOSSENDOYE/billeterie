@@ -24,7 +24,7 @@ Frontend React (Vite + Tailwind) à la racine, backend Django + MySQL dans `back
 | `/billet/:id` | E-billet horizontal avec QR code signé |
 | `/scan` | Scanner autonome pour les contrôleurs, hors du site public (code personnel) |
 | `/admin` | Tableau de bord (code personnel) |
-| http://localhost:8000/admin/ | Admin Django (`python manage.py createsuperuser`) |
+| `/django-admin/` | Admin Django (`python manage.py createsuperuser`) |
 
 Code d'accès personnel par défaut : `or2026` (variable `STAFF_ACCESS_CODE` dans `backend/.env`).
 
@@ -46,6 +46,10 @@ Pour une confirmation 100 % automatique, il faut l'API Wave Business (clé API +
 - La confirmation de paiement est idempotente : une double validation ne vend pas deux billets.
 
 Tests : `cd backend && .venv\Scripts\python manage.py test billetterie`
+
+## Déploiement
+
+Docker + Nginx sur le VPS Hostinger (billet.bouticksen.com) : voir [DEPLOIEMENT.md](DEPLOIEMENT.md).
 
 ## Passage en production
 
