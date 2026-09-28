@@ -1,21 +1,24 @@
 import { NavLink } from 'react-router-dom'
+import { useMesBillets } from '../lib/mesBillets'
 import { IconChart, IconTicket } from './Icons'
 import { Logo } from './ui'
 
 const liens = [
-  { to: '/', label: 'Billets', icon: IconTicket },
+  { to: '/', label: 'Billetterie', icon: IconTicket },
+  { to: '/mes-billets', label: 'Mes billets', icon: IconTicket, compteur: true },
   { to: '/admin', label: 'Tableau de bord', icon: IconChart },
 ]
 
 export default function Navbar() {
+  const nbBillets = useMesBillets().length
   return (
     <header className="no-print sticky top-0 z-40 border-b border-line/70 bg-ink/80 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <NavLink to="/" aria-label="Accueil">
-          <Logo />
+          <Logo compact />
         </NavLink>
         <nav className="flex gap-1">
-          {liens.map(({ to, label, icon: Icon }) => (
+          {liens.map(({ to, label, icon: Icon, compteur }) => (
             <NavLink
               key={to}
               to={to}
@@ -27,7 +30,11 @@ export default function Navbar() {
               }
             >
               <Icon className="h-4 w-4" />
-              <span className="hidden sm:inline">{label}</span>
+              {/* « Mes billets » reste lisible sur mobile : c'est le lien utile aux acheteurs */}
+              <span className={compteur ? '' : 'hidden sm:inline'}>{label}</span>
+              {compteur && nbBillets > 0 && (
+                <span className="rounded-full bg-gold px-1.5 text-[11px] font-bold leading-4 text-ink tabular-nums">{nbBillets}</span>
+              )}
             </NavLink>
           ))}
         </nav>

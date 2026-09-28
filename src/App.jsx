@@ -5,6 +5,7 @@ import StaffGate from './components/StaffGate'
 import Accueil from './pages/Accueil'
 import Paiement from './pages/Paiement'
 import Billet from './pages/Billet'
+import MesBillets from './pages/MesBillets'
 import Scanner from './pages/Scanner'
 import Admin from './pages/Admin'
 
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/" element={<Accueil />} />
           <Route path="/paiement/:reference" element={<Paiement />} />
           <Route path="/billet/:id" element={<Billet />} />
+          <Route path="/mes-billets" element={<MesBillets />} />
           <Route path="/scan" element={<StaffGate titre="Contrôle d'accès"><Scanner /></StaffGate>} />
           <Route path="/scanner" element={<Navigate to="/scan" replace />} />
           <Route path="/admin" element={<StaffGate titre="Tableau de bord"><Admin /></StaffGate>} />

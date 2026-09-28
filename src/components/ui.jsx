@@ -1,12 +1,12 @@
 import { IconAlert, IconTicket } from './Icons'
 
-export function Logo({ className = '' }) {
+export function Logo({ className = '', compact = false }) {
   return (
     <span className={`flex items-center gap-2.5 ${className}`}>
       <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-gold text-ink shadow-lg shadow-gold/20">
         <IconTicket className="h-5 w-5" />
       </span>
-      <span className="leading-tight">
+      <span className={`leading-tight ${compact ? 'hidden sm:block' : ''}`}>
         <span className="block font-display text-lg font-bold tracking-wide text-cream">Guichet</span>
         <span className="block text-[10px] font-semibold uppercase tracking-[0.3em] text-gold">Billetterie</span>
       </span>

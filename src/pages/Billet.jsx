@@ -5,6 +5,7 @@ import ArtistePhoto from '../components/ArtistePhoto'
 import { IconCheck, IconDownload, IconQr } from '../components/Icons'
 import { btn, ErrorState, PageLoader, Spinner } from '../components/ui'
 import { enregistrerImageBillet, genererImageBillet } from '../lib/billetImage'
+import { memoriserBillet } from '../lib/mesBillets'
 import { api, usePolling } from '../lib/api'
 import { dateCourte, dateEvenement, formatPrix, numeroFormat } from '../lib/format'
 
@@ -55,6 +56,11 @@ export default function Billet() {
 
   // Prépare l'image dès l'affichage (après l'animation d'entrée) et à chaque changement de statut
   const statut = data?.ticket.statut
+
+  // Retient le billet sur ce téléphone (« Mes billets »), sauf s'il est ouvert depuis le tableau de bord
+  useEffect(() => {
+    if (data && !state?.depuisAdmin) memoriserBillet(data.ticket, data.evenement)
+  }, [data, state])
   useEffect(() => {
     if (!statut) return
     imageRef.current = null

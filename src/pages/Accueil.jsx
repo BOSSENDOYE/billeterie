@@ -6,6 +6,7 @@ import { btn, ErrorState, input, PageLoader, Spinner } from '../components/ui'
 import { api, usePolling } from '../lib/api'
 import { dateEvenement, formatPrix } from '../lib/format'
 import { PAIEMENT_EN_COURS_KEY } from './Paiement'
+import { useMesBillets } from '../lib/mesBillets'
 
 const GARANTIES = [
   { icon: IconShield, titre: 'Paiement sécurisé', texte: 'Réglez avec Wave, sans frais ni carte bancaire.' },
@@ -29,6 +30,7 @@ export default function Accueil() {
   const [tel, setTel] = useState('')
   const [erreur, setErreur] = useState('')
   const [envoi, setEnvoi] = useState(false)
+  const mesBillets = useMesBillets()
   const [enCours] = useState(() => {
     try {
       return localStorage.getItem(PAIEMENT_EN_COURS_KEY)
@@ -87,6 +89,17 @@ export default function Accueil() {
           </div>
         </div>
       </section>
+
+      {mesBillets.length > 0 && (
+        <div className="mx-auto max-w-6xl px-4 pt-6">
+          <Link to="/mes-billets" className="flex animate-fade-in items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm transition hover:bg-emerald-500/15">
+            <span>
+              Vous avez <strong>{mesBillets.length} billet{mesBillets.length > 1 ? 's' : ''}</strong> sur ce téléphone
+            </span>
+            <span className="font-semibold text-emerald-300">Mes billets →</span>
+          </Link>
+        </div>
+      )}
 
       {enCours && (
         <div className="mx-auto max-w-6xl px-4 pt-6">

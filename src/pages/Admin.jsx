@@ -155,7 +155,7 @@ export default function Admin() {
                   <td className="px-4 py-3 tabular-nums text-muted">{dateCourte(t.date_scan)}</td>
                   <td className="px-4 py-3 text-right">
                     {t.statut !== 'disponible' && (
-                      <Link to={`/billet/${t.id}`} className="text-xs font-semibold text-gold hover:text-gold-light">Voir le billet</Link>
+                      <Link to={`/billet/${t.id}`} state={{ depuisAdmin: true }} className="text-xs font-semibold text-gold hover:text-gold-light">Voir le billet</Link>
                     )}
                   </td>
                 </tr>
