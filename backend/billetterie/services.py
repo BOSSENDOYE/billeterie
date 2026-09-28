@@ -86,7 +86,7 @@ def generer_demo(vendus=0, scannes=0):
     ev = Evenement.objects.create(
         artiste='Dip Doundou Guiss',
         titre='Dip Doundou Guiss — Live à Mboro',
-        date=datetime(2026, 12, 26, 21, 0, tzinfo=tz),
+        date=datetime(2026, 12, 26, 20, 0, tzinfo=tz),
         lieu='Terrain de tennis de la Cité Mbaye Mbaye',
         ville='Mboro',
         prix=2500,
