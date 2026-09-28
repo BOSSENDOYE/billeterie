@@ -55,10 +55,6 @@
   background: linear-gradient(135deg, var(--color-gold-light), var(--color-gold) 50%, var(--color-gold-dark));
 }
 
-/* html5-qrcode injecte sa propre vidéo */
-#qr-reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
-#qr-reader { border: 0 !important; }
-
 @media print {
   body { background: #fff; }
   .no-print { display: none !important; }

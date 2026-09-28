@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { IconAlert, IconCamera, IconCheck, IconX } from '../components/Icons'
 import { btn, Logo, Spinner } from '../components/ui'
 import { api, usePolling } from '../lib/api'
 import { dateCourte, heure, numeroFormat } from '../lib/format'
+import { demarrerScanner, prechargerLecteur } from '../lib/qrScanner'
 
 const RESULTATS = {
   valide: { bg: 'bg-emerald-600', dot: 'bg-emerald-500', Icon: IconCheck, titre: 'BILLET VALIDE', court: 'Valide', duree: 2200 },
@@ -87,8 +87,8 @@ export default function Scanner() {
   const [res, setRes] = useState(null)
   const [verif, setVerif] = useState(false)
   const [torche, setTorche] = useState({ dispo: false, allumee: false })
-  const qrRef = useRef(null)
-  const torcheRef = useRef(null)
+  const videoRef = useRef(null)
+  const scannerRef = useRef(null)
   const wakeLockRef = useRef(null)
   const busy = useRef(false)
   const dernier = useRef({ texte: '', jusqua: 0 })
@@ -102,14 +102,12 @@ export default function Scanner() {
     }
   }
 
-  async function arreter() {
-    const qr = qrRef.current
-    qrRef.current = null
-    torcheRef.current = null
+  function arreter() {
+    scannerRef.current?.arreter()
+    scannerRef.current = null
     setActif(false)
     setTorche({ dispo: false, allumee: false })
     garderEcranAllume(false)
-    if (qr?.isScanning) await qr.stop().catch(() => {})
   }
 
   async function traiter(texte) {
@@ -151,42 +149,13 @@ export default function Scanner() {
       /* audio indisponible */
     }
     try {
-      const qr = new Html5Qrcode('qr-reader', {
-        verbose: false,
-        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-        useBarCodeDetectorIfSupported: true,
-        // Détecteur natif du téléphone (Android/Chrome) : bien plus rapide et tolérant
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-      })
-      qrRef.current = qr
-      await qr.start(
-        { facingMode: 'environment' },
-        {
-          fps: 15,
-          // Zone d'analyse : 85 % du petit côté de l'image
-          qrbox: (w, h) => {
-            const cote = Math.floor(Math.min(w, h) * 0.85)
-            return { width: cote, height: cote }
-          },
-          videoConstraints: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        },
-        traiter,
-        () => {},
-      )
+      const scanner = await demarrerScanner(videoRef.current, traiter)
+      scannerRef.current = scanner
       setActif(true)
+      setTorche({ dispo: scanner.torcheDispo, allumee: false })
       garderEcranAllume(true)
-      qr.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {})
-      try {
-        const t = qr.getRunningTrackCameraCapabilities().torchFeature()
-        if (t.isSupported()) {
-          torcheRef.current = t
-          setTorche({ dispo: true, allumee: false })
-        }
-      } catch {
-        /* torche non gérée par ce navigateur */
-      }
     } catch (e) {
-      qrRef.current = null
+      scannerRef.current = null
       setErreurCam(
         window.isSecureContext
           ? `Caméra indisponible : ${e?.message ?? e}. Autorisez l'accès à la caméra dans le navigateur.`
@@ -198,19 +167,21 @@ export default function Scanner() {
   }
 
   async function basculerTorche() {
-    const t = torcheRef.current
-    if (!t) return
+    const scanner = scannerRef.current
+    if (!scanner) return
     try {
-      await t.apply(!torche.allumee)
+      await scanner.torche(!torche.allumee)
       setTorche((s) => ({ ...s, allumee: !s.allumee }))
     } catch {
       setTorche({ dispo: false, allumee: false })
     }
   }
 
+  useEffect(() => prechargerLecteur(), [])
+
   useEffect(
     () => () => {
-      if (qrRef.current?.isScanning) qrRef.current.stop().catch(() => {})
+      scannerRef.current?.arreter()
       wakeLockRef.current?.release?.().catch?.(() => {})
     },
     [],
@@ -239,12 +210,11 @@ export default function Scanner() {
 
       {/* Caméra */}
       <div className="relative mt-3 aspect-[3/4] w-full overflow-hidden rounded-2xl border border-line bg-black">
-        <div id="qr-reader" className="h-full w-full [&_video]:!h-full [&_video]:!w-full [&_video]:object-cover" />
+        <video ref={videoRef} playsInline muted className={`h-full w-full object-cover ${actif ? '' : 'invisible'}`} />
 
         {actif && (
           <>
-            {/* Cadre de visée : html5-qrcode dessine le sien, on le remplace par un cadre doré */}
-            <style>{'#qr-reader__scan_region img, #qr-shaded-region { display: none !important; }'}</style>
+            {/* Cadre de visée indicatif : toute l'image est analysée */}
             <div className="pointer-events-none absolute inset-0 grid place-items-center">
               <div className="relative aspect-square w-[78%]">
                 {['left-0 top-0 border-l-4 border-t-4 rounded-tl-2xl', 'right-0 top-0 border-r-4 border-t-4 rounded-tr-2xl', 'bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl', 'bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl'].map((c) => (
@@ -255,7 +225,7 @@ export default function Scanner() {
             </div>
             <style>{'@keyframes balayage{0%,100%{top:4%}50%{top:94%}}'}</style>
             <p className="pointer-events-none absolute inset-x-0 top-3 text-center text-sm font-medium text-white drop-shadow">
-              Placez le QR code dans le cadre
+              Visez le QR code
             </p>
 
             <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-4 bg-gradient-to-t from-black/80 to-transparent p-4">
