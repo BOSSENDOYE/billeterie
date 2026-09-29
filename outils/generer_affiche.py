@@ -130,11 +130,17 @@ def main():
     d.rounded_rectangle([marge, haut, W - marge, haut + hauteur], radius=48, outline=OR, width=5, fill=(18, 18, 20))
 
     gx = marge + 100
-    d.text((gx, haut + 95), 'ENTRÉE', font=bahn(68, 'SemiBold'), fill=GRIS)
-    d.text((gx, haut + 165), '2 500', font=serif(250), fill=OR_CLAIR)
-    d.text((gx + 8, haut + 445), 'FCFA', font=bahn(110, 'Bold'), fill=OR)
-    d.text((gx, haut + 600), 'Paiement Wave', font=bahn(70, 'SemiBold'), fill=CREME)
-    d.text((gx, haut + 685), '300 places seulement', font=bahn(60, 'Regular'), fill=GRIS)
+    # Prévente (tarif mis en avant)
+    d.text((gx, haut + 85), 'PRÉVENTE', font=bahn(68, 'Bold'), fill=OR)
+    d.text((gx, haut + 150), '2 500', font=serif(230), fill=OR_CLAIR)
+    fcfa = bahn(90, 'Bold')
+    d.text((gx + d.textlength('2 500', font=serif(230)) + 30, haut + 285), 'FCFA', font=fcfa, fill=OR)
+    # Séparateur
+    d.line([(gx, haut + 470), (gx + 900, haut + 470)], fill=(60, 55, 45), width=3)
+    # Jour J
+    d.text((gx, haut + 510), 'JOUR J', font=bahn(68, 'Bold'), fill=GRIS)
+    d.text((gx, haut + 580), '3 000 FCFA', font=bahn(120, 'Bold'), fill=CREME)
+    d.text((gx, haut + 745), '300 places seulement', font=bahn(58, 'Regular'), fill=GRIS)
 
     # QR code (correction H : reste lisible même abîmé, froissé ou mal imprimé)
     q = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H, border=2, box_size=24)
