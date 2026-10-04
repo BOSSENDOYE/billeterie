@@ -81,7 +81,9 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx   # si absent
-sudo certbot --nginx -d billeteriecjics.com -d www.billeteriecjics.com
+sudo mkdir -p /var/www/certbot
+sudo certbot certonly --webroot -w /var/www/certbot -d billeteriecjics.com -d www.billeteriecjics.com
+sudo certbot install --nginx --cert-name billeteriecjics.com --redirect
 ```
 
 Le site est alors sur **https://billeteriecjics.com**.
