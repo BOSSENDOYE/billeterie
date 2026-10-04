@@ -4,7 +4,7 @@ import { btn, Logo } from './ui'
 import { api } from '../lib/api'
 import { dateEvenement } from '../lib/format'
 
-const SRC = '/musique/son.mp4'
+const SRC = '/musique/son.m4a'
 const PREF_KEY = 'billetterie_son_coupe'
 const VOLUME = 0.5
 
