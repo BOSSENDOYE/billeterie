@@ -64,7 +64,9 @@ export default function VenteGuichet({ evenement: ev, stats, onVente }) {
                 >
                   <span className="block text-xs font-bold tracking-[0.2em]">{th.bandeau}</span>
                   <span className="block font-display text-xl font-bold">{formatPrix(t === 'jour_j' ? ev.prix_jour_j : ev.prix_prevente)}</span>
-                  <span className="block text-[11px]">{stats.par_type?.[t]?.restants ?? '—'} restants</span>
+                  <span className="block text-[11px]">
+                    {stats.par_type?.[t]?.physiques > 0 ? 'Billets papier imprimés' : `${stats.par_type?.[t]?.restants ?? '—'} restants`}
+                  </span>
                 </button>
               )
             })}

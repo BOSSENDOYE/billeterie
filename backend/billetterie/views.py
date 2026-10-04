@@ -6,7 +6,8 @@ from functools import wraps
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
+from django.http import HttpResponse
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -71,6 +72,7 @@ def ser_ticket(t, qr=False):
         'type': t.type,
         'code': t.code,
         'prix': t.prix,
+        'physique': t.physique,
         'statut': t.statut,
         'acheteur_nom': t.acheteur_nom or None,
         'acheteur_tel': t.acheteur_tel or None,
@@ -111,15 +113,21 @@ def stats(ev):
         agg = ev.tickets.filter(type=type_billet).aggregate(
             vendus=Count('pk', filter=~Q(statut=Ticket.Statut.DISPONIBLE)),
             scannes=Count('pk', filter=Q(statut=Ticket.Statut.UTILISE)),
+            physiques=Count('pk', filter=Q(physique=True)),
+            physiques_entres=Count('pk', filter=Q(physique=True, statut=Ticket.Statut.UTILISE)),
         )
         quota = ev.quota_de(type_billet)
+        prix = ev.prix_de(type_billet)
+        encaisse = ev.paiements.filter(type=type_billet, statut=Paiement.Statut.REUSSI).aggregate(s=Sum('montant'))['s'] or 0
         par_type[type_billet] = {
             'total': quota,
             'vendus': agg['vendus'],
             'scannes': agg['scannes'],
             'restants': quota - agg['vendus'],
-            'prix': ev.prix_de(type_billet),
-            'recette': agg['vendus'] * ev.prix_de(type_billet),
+            'physiques': agg['physiques'],
+            'prix': prix,
+            # Paiements encaissés + billets papier présentés à l'entrée (vendus de la main à la main)
+            'recette': encaisse + agg['physiques_entres'] * prix,
         }
     somme = lambda cle: sum(t[cle] for t in par_type.values())  # noqa: E731
     return {
@@ -160,6 +168,8 @@ def evenement(request):
         'evenement': ser_evenement(ev),
         'tarif': tarif,
         'restants': tarif['restants'],
+        # En ligne : prévente uniquement. Les billets Jour J sont vendus en papier, sur place.
+        'vente_en_ligne': tarif['type'] == TypeBillet.PREVENTE,
         'paiement_simule': settings.PAIEMENT_SIMULE,
     })
 
@@ -178,6 +188,8 @@ def creer_paiement(request):
     if not TEL_RE.match(tel):
         return erreur('Numéro invalide : 9 chiffres commençant par 70, 75, 76, 77 ou 78')
     tarif = tarif_en_vente(ev)
+    if tarif['type'] == TypeBillet.JOUR_J:
+        return erreur(f"Prévente terminée : billets Jour J en vente sur place ({ev.prix_jour_j} FCFA)", 409)
     if tarif['restants'] == 0:
         message = ('Prévente épuisée : les billets Jour J seront en vente le jour du concert'
                    if tarif['type'] == TypeBillet.PREVENTE else 'Complet : tous les billets Jour J sont vendus')
@@ -379,3 +391,20 @@ def staff_vente_guichet(request):
     if ticket is None:
         return erreur(f'Plus aucun billet {TypeBillet(type_billet).label} disponible', 409)
     return JsonResponse({'ticket': ser_ticket(ticket, qr=True), 'evenement': ser_evenement(ev)}, status=201)
+
+
+@staff_requis
+@require_POST
+def staff_billets_physiques(request):
+    """Émet les 200 billets Jour J en papier et renvoie le PDF à imprimer (10 par page A4)."""
+    from .impression import generer_pdf
+
+    ev, err = evenement_ou_404()
+    if err:
+        return err
+    tickets = services.emettre_billets_physiques(ev)
+    if not tickets:
+        return erreur("Aucun billet Jour J disponible pour l'impression", 409)
+    reponse = HttpResponse(generer_pdf(tickets, ev), content_type='application/pdf')
+    reponse['Content-Disposition'] = 'attachment; filename="billets-jour-j.pdf"'
+    return reponse

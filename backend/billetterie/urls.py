@@ -16,6 +16,7 @@ urlpatterns = [
     path('staff/tickets', views.staff_tickets),
     path('staff/paiements', views.staff_paiements),
     path('staff/vente-guichet', views.staff_vente_guichet),
+    path('staff/billets-physiques', views.staff_billets_physiques),
     path('staff/paiements/<str:reference>/valider', views.staff_valider_paiement),
     path('staff/paiements/<str:reference>/rejeter', views.staff_rejeter_paiement),
 ]

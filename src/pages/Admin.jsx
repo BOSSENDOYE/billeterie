@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { IconScan, IconSearch } from '../components/Icons'
 import PaiementsAVerifier from '../components/PaiementsAVerifier'
 import VenteGuichet from '../components/VenteGuichet'
+import BilletsPapier from '../components/BilletsPapier'
 import { btn, ErrorState, Logo, PageLoader, input } from '../components/ui'
 import { api, usePolling } from '../lib/api'
 import { dateCourte, dateEvenement, formatPrix } from '../lib/format'
@@ -39,7 +40,7 @@ function Serie({ type, serie }) {
         <span className="text-sm text-muted">{formatPrix(serie.prix)}</span>
       </div>
       <p className="mt-3 font-display text-3xl font-bold tabular-nums">
-        {serie.vendus}<span className="text-lg text-muted"> / {serie.total} vendus</span>
+        {serie.vendus}<span className="text-lg text-muted"> / {serie.total} {serie.physiques > 0 ? 'imprimés' : 'vendus'}</span>
       </p>
       <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-line">
         <div className="bg-emerald-400 transition-all duration-700" style={{ width: pct(serie.scannes) }} />
@@ -126,6 +127,8 @@ export default function Admin() {
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {s.par_type && ['prevente', 'jour_j'].map((t) => <Serie key={t} type={t} serie={s.par_type[t]} />)}
       </div>
+
+      {s.par_type && <BilletsPapier evenement={ev} serie={s.par_type.jour_j} onImpression={() => { stats.reload(); liste.reload() }} />}
 
       <VenteGuichet evenement={ev} stats={s} onVente={() => { stats.reload(); liste.reload() }} />
 

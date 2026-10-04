@@ -54,6 +54,29 @@ async function request(path, { method = 'GET', body, staff = false, code } = {})
   return data
 }
 
+/** Télécharge un fichier renvoyé par une route du personnel (ex. PDF des billets papier). */
+async function telechargerFichier(path, nomFichier) {
+  let res
+  try {
+    res = await fetch(`/api/${path}`, { method: 'POST', headers: { 'X-Staff-Code': staffCode.get() } })
+  } catch {
+    throw new ApiError('Serveur injoignable.', 0)
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    if (res.status === 401) staffCode.set('')
+    throw new ApiError(data.erreur || `Erreur ${res.status}`, res.status)
+  }
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nomFichier
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 export const api = {
   evenement: () => request('evenement'),
   creerPaiement: (nom, telephone) => request('paiements', { method: 'POST', body: { nom, telephone } }),
@@ -67,6 +90,7 @@ export const api = {
   scans: () => request('staff/scans', { staff: true }),
   stats: () => request('staff/stats', { staff: true }),
   tickets: (statut, q, type = 'tous') => request(`staff/tickets?${new URLSearchParams({ statut, q, type })}`, { staff: true }),
+  billetsPapierPdf: () => telechargerFichier('staff/billets-physiques', 'billets-jour-j.pdf'),
   venteGuichet: (vente) => request('staff/vente-guichet', { method: 'POST', body: vente, staff: true }),
   paiements: (statut) => request(`staff/paiements?${new URLSearchParams({ statut })}`, { staff: true }),
   validerPaiement: (ref) => request(`staff/paiements/${ref}/valider`, { method: 'POST', body: {}, staff: true }),

@@ -79,6 +79,20 @@ def vendre_guichet(ev, type_billet, nom='', telephone='', entree_immediate=True)
     return ticket
 
 
+@transaction.atomic
+def emettre_billets_physiques(ev):
+    """Émet les billets Jour J en papier : ils deviennent valides (une seule entrée chacun).
+
+    Idempotent : les billets déjà émis ou vendus sont conservés, seuls les disponibles sont émis.
+    Retourne tous les billets papier Jour J, par numéro.
+    """
+    maintenant = timezone.now()
+    Ticket.objects.filter(evenement=ev, type=TypeBillet.JOUR_J, statut=Ticket.Statut.DISPONIBLE).update(
+        statut=Ticket.Statut.VENDU, physique=True, acheteur_nom='Billet papier', date_achat=maintenant,
+    )
+    return list(Ticket.objects.filter(evenement=ev, type=TypeBillet.JOUR_J, physique=True).order_by('numero'))
+
+
 def _invalide(raison):
     Scan.objects.create(resultat=Scan.Resultat.INVALIDE, raison=raison)
     return {'resultat': 'invalide', 'raison': raison}
@@ -125,7 +139,7 @@ def generer_demo(vendus=0, scannes=0):
     ev = Evenement.objects.create(
         artiste='Dip Doundou Guiss',
         titre='Dip Doundou Guiss — Live à Mboro',
-        date=datetime(2026, 12, 26, 20, 0, tzinfo=tz),
+        date=datetime(2026, 12, 26, 19, 0, tzinfo=tz),
         lieu='Terrain de tennis de la Cité Mbaye Mbaye',
         ville='Mboro',
         prix=2500,

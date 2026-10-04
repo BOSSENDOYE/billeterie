@@ -183,6 +183,15 @@ export default function Accueil() {
               </div>
             </div>
 
+            {data.vente_en_ligne === false ? (
+              <div className="mt-6 rounded-xl border border-ruby/50 bg-ruby/10 p-5 text-center">
+                <p className="font-display text-xl font-bold text-ruby-light">Prévente terminée</p>
+                <p className="mt-2 text-sm text-cream/85">
+                  Billets Jour J à <strong>{formatPrix(ev.prix_jour_j)}</strong>, en vente sur place le jour du concert.
+                </p>
+                <p className="mt-3 text-xs text-muted">Vous avez déjà un billet ? Retrouvez-le dans « Mes billets ».</p>
+              </div>
+            ) : (
             <form onSubmit={payer} className="mt-6 space-y-4">
               <label className="block">
                 <span className="text-sm font-medium text-cream/90">Nom complet</span>
@@ -208,6 +217,7 @@ export default function Accueil() {
                 </p>
               )}
             </form>
+            )}
           </div>
         </aside>
       </div>

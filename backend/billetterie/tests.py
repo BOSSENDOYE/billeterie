@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import timedelta
 
 from django.test import TestCase, override_settings
@@ -139,15 +140,15 @@ class ParcoursTest(TestCase):
         tarif = self.client.get('/api/evenement').json()['tarif']
         self.assertEqual((tarif['type'], tarif['prix'], tarif['restants']), ('prevente', 2500, 400))
         ticket = self.client.get(f'/api/tickets/{self.acheter()}').json()['ticket']
-        self.assertEqual((ticket['type'], ticket['prix'], ticket['code']), ('prevente', 2500, 'PV-001/400'))
+        self.assertEqual((ticket['type'], ticket['prix'], ticket['code']), ('prevente', 2500, 'PV-001'))
 
-    def test_jour_j_apres_la_date(self):
+    def test_jour_j_pas_de_vente_en_ligne(self):
         self.passer_au_jour_j()
-        p = self.creer()
-        self.assertEqual((p['type'], p['montant']), ('jour_j', 3000))
-        self.assertIn('amount=3000', p['wave_url'])
-        ticket = self.client.get(f'/api/tickets/{self.acheter()}').json()['ticket']
-        self.assertEqual((ticket['type'], ticket['code']), ('jour_j', 'JJ-001/200'))
+        d = self.client.get('/api/evenement').json()
+        self.assertEqual((d['tarif']['type'], d['vente_en_ligne']), ('jour_j', False))
+        r = self.post('/api/paiements', {'nom': 'Awa Ba', 'telephone': '771234567'})
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('sur place', r.json()['erreur'])
 
     def test_prevente_payee_puis_validee_le_jour_j_reste_prevente(self):
         ref = self.creer()['reference']
@@ -166,7 +167,7 @@ class ParcoursTest(TestCase):
         r = self.post('/api/staff/vente-guichet', {'type': 'jour_j', 'nom': 'Moussa'}, **STAFF)
         self.assertEqual(r.status_code, 201)
         t = r.json()['ticket']
-        self.assertEqual((t['type'], t['statut'], t['code']), ('jour_j', 'utilise', 'JJ-001/200'))
+        self.assertEqual((t['type'], t['statut'], t['code']), ('jour_j', 'utilise', 'JJ-001'))
         # Le billet ne peut pas resservir
         self.assertEqual(self.post('/api/staff/scan', {'qr': t['qr']}, **STAFF).json()['resultat'], 'utilise')
         stats = self.client.get('/api/staff/stats', **STAFF).json()['stats']
@@ -174,3 +175,45 @@ class ParcoursTest(TestCase):
 
     def test_vente_guichet_reservee_au_personnel(self):
         self.assertEqual(self.post('/api/staff/vente-guichet', {'type': 'jour_j'}).status_code, 401)
+
+    # --- Billets papier Jour J ---------------------------------------------
+
+    def imprimer(self):
+        r = self.client.post('/api/staff/billets-physiques', **STAFF)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'application/pdf')
+        self.assertTrue(r.content.startswith(b'%PDF'))
+        return r
+
+    def test_impression_des_200_billets_jour_j(self):
+        r = self.imprimer()
+        pages = re.findall(rb'/Type\s*/Page[^s]', r.content)
+        self.assertEqual(len(pages), 20)  # 200 billets, 10 par page
+        papier = Ticket.objects.filter(type='jour_j', physique=True)
+        self.assertEqual(papier.count(), 200)
+        self.assertFalse(papier.exclude(statut='vendu').exists())
+        self.assertFalse(Ticket.objects.filter(type='prevente', physique=True).exists())
+
+    def test_billet_papier_entre_une_seule_fois(self):
+        self.imprimer()
+        qr = Ticket.objects.get(type='jour_j', numero=7).qr_payload
+        r1 = self.post('/api/staff/scan', {'qr': qr}, **STAFF).json()
+        self.assertEqual((r1['resultat'], r1['ticket']['code']), ('valide', 'JJ-007'))
+        self.assertEqual(self.post('/api/staff/scan', {'qr': qr}, **STAFF).json()['resultat'], 'utilise')
+
+    def test_reimpression_sans_effet_sur_les_billets_utilises(self):
+        self.imprimer()
+        qr = Ticket.objects.get(type='jour_j', numero=1).qr_payload
+        self.post('/api/staff/scan', {'qr': qr}, **STAFF)
+        self.imprimer()
+        self.assertEqual(Ticket.objects.get(type='jour_j', numero=1).statut, 'utilise')
+
+    def test_recette_papier_comptee_a_l_entree(self):
+        self.imprimer()
+        for n in (1, 2):
+            self.post('/api/staff/scan', {'qr': Ticket.objects.get(type='jour_j', numero=n).qr_payload}, **STAFF)
+        jj = self.client.get('/api/staff/stats', **STAFF).json()['stats']['par_type']['jour_j']
+        self.assertEqual((jj['physiques'], jj['scannes'], jj['recette']), (200, 2, 6000))
+
+    def test_impression_reservee_au_personnel(self):
+        self.assertEqual(self.client.post('/api/staff/billets-physiques').status_code, 401)

@@ -119,7 +119,7 @@ def main():
 
     # --- Date, heure, lieu
     y += 95
-    texte_centre(d, y, 'SAMEDI 26 DÉCEMBRE 2026  ·  20H', bahn(112, 'Bold'), CREME, lettrage=4)
+    texte_centre(d, y, 'SAMEDI 26 DÉCEMBRE 2026  ·  19H', bahn(112, 'Bold'), CREME, lettrage=4)
     y += 160
     texte_centre(d, y, 'Terrain de tennis de la Cité Mbaye Mbaye  ·  MBORO', bahn(72, 'SemiBold'), OR_CLAIR)
 

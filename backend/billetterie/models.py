@@ -70,6 +70,8 @@ class Ticket(models.Model):
     acheteur_tel = models.CharField(max_length=20, blank=True)
     date_achat = models.DateTimeField(null=True, blank=True)
     date_scan = models.DateTimeField(null=True, blank=True)
+    # Billet imprimé et vendu en papier (série Jour J) : valide dès son impression
+    physique = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['type', 'numero']
@@ -80,8 +82,8 @@ class Ticket(models.Model):
 
     @property
     def code(self):
-        """Ex. « PV-042/400 » (prévente) ou « JJ-015/200 » (Jour J)."""
-        return f'{PREFIXES[self.type]}-{self.numero:03d}/{self.evenement.quota_de(self.type)}'
+        """Ex. « PV-042 » (prévente) ou « JJ-015 » (Jour J)."""
+        return f'{PREFIXES[self.type]}-{self.numero:03d}'
 
     @property
     def prix(self):
