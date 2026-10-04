@@ -53,10 +53,36 @@ export default function Accueil() {
   const complet = restants === 0
   const finPrevente = ev.fin_prevente && dateEvenement(new Date(new Date(ev.fin_prevente).getTime() - 60000).toISOString())
 
+  // Mêmes règles que le serveur : un paiement Wave ne doit pas partir pour un formulaire refusé ensuite
+  function verifier() {
+    if (nom.trim().length < 2) return 'Veuillez saisir votre nom complet.'
+    if (!/^7[05678]\d{7}$/.test(tel.replace(/\D/g, ''))) return 'Numéro Wave invalide : 9 chiffres commençant par 70, 75, 76, 77 ou 78.'
+    return ''
+  }
+
+  // Paiement réel : le lien Wave s'ouvre par le clic lui-même (application Wave sur téléphone,
+  // montant pré-rempli) ; pendant ce temps l'onglet enregistre la commande et attend la confirmation.
+  async function payerAvecWave(e) {
+    const probleme = verifier()
+    if (probleme) {
+      e.preventDefault()
+      return setErreur(probleme)
+    }
+    setErreur('')
+    setEnvoi(true)
+    try {
+      const { paiement } = await api.creerPaiement(nom.trim(), tel)
+      navigate(`/paiement/${paiement.reference}`, { state: { waveOuvert: true } })
+    } catch (err) {
+      setErreur(`${err.message} — si vous avez déjà payé sur Wave, contactez l'organisateur avec votre numéro.`)
+      setEnvoi(false)
+    }
+  }
+
   async function payer(e) {
     e.preventDefault()
-    if (nom.trim().length < 2) return setErreur('Veuillez saisir votre nom complet.')
-    if (tel.replace(/\D/g, '').length !== 9) return setErreur('Le numéro doit comporter 9 chiffres.')
+    const probleme = verifier()
+    if (probleme) return setErreur(probleme)
     setErreur('')
     setEnvoi(true)
     try {
@@ -206,9 +232,25 @@ export default function Accueil() {
               </label>
               {erreur && <p className="animate-fade-in text-sm text-red-400">{erreur}</p>}
 
-              <button disabled={complet || envoi} className="flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40">
-                {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : complet ? (enPrevente ? 'Prévente épuisée' : 'Complet') : <>Payer {formatPrix(tarif.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
-              </button>
+              {data.paiement_simule || complet || !data.wave_url ? (
+                <button disabled={complet || envoi} className="flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40">
+                  {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : complet ? (enPrevente ? 'Prévente épuisée' : 'Complet') : <>Payer {formatPrix(tarif.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
+                </button>
+              ) : (
+                <a
+                  href={data.wave_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={payerAvecWave}
+                  aria-disabled={envoi}
+                  className={`flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98] ${envoi ? 'pointer-events-none opacity-60' : ''}`}
+                >
+                  {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : <>Payer {formatPrix(tarif.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
+                </a>
+              )}
+              {!data.paiement_simule && !complet && (
+                <p className="text-center text-xs text-muted">Wave s'ouvre avec le montant de {formatPrix(tarif.prix)}. Revenez ensuite ici pour recevoir votre billet.</p>
+              )}
               {envoi && data.paiement_simule && <p className="animate-fade-in text-center text-sm text-wave">Paiement Wave en cours…</p>}
               <p className="text-center text-xs text-muted">Billet nominatif, non remboursable.</p>
               {data.paiement_simule && (

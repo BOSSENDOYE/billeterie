@@ -174,6 +174,8 @@ def evenement(request):
         # En ligne : prévente uniquement. Les billets Jour J sont vendus en papier, sur place.
         'vente_en_ligne': tarif['type'] == TypeBillet.PREVENTE,
         'paiement_simule': settings.PAIEMENT_SIMULE,
+        # Lien marchand avec le montant pré-rempli : le bouton l'ouvre directement
+        'wave_url': wave_url(tarif['prix']),
     })
 
 

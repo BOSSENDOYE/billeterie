@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { IconAlert, IconCheck } from '../components/Icons'
 import { btn, ErrorState, PageLoader, Spinner } from '../components/ui'
 import { api, usePolling } from '../lib/api'
@@ -41,7 +41,8 @@ export default function Paiement() {
   const { reference } = useParams()
   const navigate = useNavigate()
   const { data, error, reload } = usePolling(() => api.paiement(reference), [reference], 5000)
-  const [ouvert, setOuvert] = useState(false)
+  const { state } = useLocation()
+  const [ouvert, setOuvert] = useState(Boolean(state?.waveOuvert))
   const [erreur, setErreur] = useState('')
   const [envoi, setEnvoi] = useState(false)
 

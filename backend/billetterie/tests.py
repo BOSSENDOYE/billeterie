@@ -36,6 +36,12 @@ class ParcoursTest(TestCase):
         self.assertTrue(p['wave_url'].startswith('https://pay.wave.com/m/'))
         self.assertIn('amount=2500', p['wave_url'])
 
+    def test_lien_wave_disponible_avant_le_paiement(self):
+        # Le bouton de l'accueil ouvre Wave directement : le lien (montant pré-rempli) doit être connu d'avance
+        url = self.client.get('/api/evenement').json()['wave_url']
+        self.assertTrue(url.startswith('https://pay.wave.com/m/'))
+        self.assertIn('amount=2500', url)
+
     def test_pas_de_billet_avant_validation(self):
         ref = self.creer()['reference']
         self.post(f'/api/paiements/{ref}/declarer', {'transaction': 'T_ABC123XYZ'})
