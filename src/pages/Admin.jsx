@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { IconScan, IconSearch } from '../components/Icons'
 import PaiementsAVerifier from '../components/PaiementsAVerifier'
+import VenteGuichet from '../components/VenteGuichet'
 import { btn, ErrorState, Logo, PageLoader, input } from '../components/ui'
 import { api, usePolling } from '../lib/api'
-import { dateCourte, dateEvenement, formatPrix, numeroFormat } from '../lib/format'
+import { dateCourte, dateEvenement, formatPrix } from '../lib/format'
+import { typeBillet } from '../lib/typesBillet'
 
 const FILTRES = [
   { id: 'tous', label: 'Tous' },
@@ -13,12 +15,43 @@ const FILTRES = [
   { id: 'disponible', label: 'Disponibles' },
 ]
 
+const FILTRES_TYPE = [
+  { id: 'tous', label: 'Tous types' },
+  { id: 'prevente', label: 'Prévente' },
+  { id: 'jour_j', label: 'Jour J' },
+]
+
 const BADGE = {
   disponible: 'border-line text-muted',
   vendu: 'border-gold/40 text-gold-light',
   utilise: 'border-emerald-500/40 text-emerald-300',
 }
 const LIBELLE = { disponible: 'Disponible', vendu: 'Vendu', utilise: 'Scanné' }
+
+/** Remplissage d'une série (prévente ou Jour J). */
+function Serie({ type, serie }) {
+  const th = typeBillet(type)
+  const pct = (n) => `${(n / serie.total) * 100}%`
+  return (
+    <div className={`rounded-2xl border bg-surface p-5 ${th.bordure}`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold tracking-[0.2em] ${th.badge}`}>{th.bandeau}</span>
+        <span className="text-sm text-muted">{formatPrix(serie.prix)}</span>
+      </div>
+      <p className="mt-3 font-display text-3xl font-bold tabular-nums">
+        {serie.vendus}<span className="text-lg text-muted"> / {serie.total} vendus</span>
+      </p>
+      <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-line">
+        <div className="bg-emerald-400 transition-all duration-700" style={{ width: pct(serie.scannes) }} />
+        <div className={`transition-all duration-700 ${type === 'jour_j' ? 'bg-gradient-ruby' : 'bg-gradient-gold'}`} style={{ width: pct(serie.vendus - serie.scannes) }} />
+      </div>
+      <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted">
+        <span>{serie.scannes} entrés · {serie.restants} restants</span>
+        <span className={th.accentClair}>{formatPrix(serie.recette)}</span>
+      </div>
+    </div>
+  )
+}
 
 function Stat({ label, valeur, detail, accent = 'text-cream' }) {
   return (
@@ -32,6 +65,7 @@ function Stat({ label, valeur, detail, accent = 'text-cream' }) {
 
 export default function Admin() {
   const [filtre, setFiltre] = useState('tous')
+  const [filtreType, setFiltreType] = useState('tous')
   const [recherche, setRecherche] = useState('')
   const [q, setQ] = useState('')
   const [copie, setCopie] = useState(false)
@@ -43,14 +77,13 @@ export default function Admin() {
   }, [recherche])
 
   const stats = usePolling(api.stats, [], 4000)
-  const liste = usePolling(() => api.tickets(filtre, q), [filtre, q], 4000)
+  const liste = usePolling(() => api.tickets(filtre, q, filtreType), [filtre, q, filtreType], 4000)
 
   if (stats.error && !stats.data) return <ErrorState message={stats.error.message} />
   if (!stats.data) return <PageLoader />
 
   const { evenement: ev, stats: s } = stats.data
   const tickets = liste.data?.tickets ?? []
-  const pct = (n) => `${(n / s.total) * 100}%`
 
   // Lien du scanner à transmettre aux contrôleurs (sur le réseau local, remplacer localhost par l'IP du PC)
   const lienScan = `${window.location.origin}/scan`
@@ -84,30 +117,32 @@ export default function Admin() {
       <PaiementsAVerifier onChange={() => { stats.reload(); liste.reload() }} />
 
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Capacité" valeur={s.total} />
+        <Stat label="Capacité" valeur={s.total} detail={`${ev.quota_prevente} prévente + ${ev.quota_jour_j} Jour J`} />
         <Stat label="Vendus" valeur={s.vendus} detail={`Recette : ${formatPrix(s.recette)}`} accent="text-gold-light" />
         <Stat label="Entrées" valeur={s.scannes} detail={s.vendus ? `${Math.round((s.scannes / s.vendus) * 100)} % des billets vendus` : null} accent="text-emerald-300" />
         <Stat label="Restants" valeur={s.restants} detail={`${Math.round((s.restants / s.total) * 100)} % de la jauge`} />
       </div>
 
-      <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
-        <div className="flex justify-between text-sm">
-          <span className="font-medium">Remplissage</span>
-          <span className="tabular-nums text-muted">{Math.round((s.vendus / s.total) * 100)} % vendus</span>
-        </div>
-        <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-line">
-          <div className="bg-emerald-400 transition-all duration-700" style={{ width: pct(s.scannes) }} />
-          <div className="bg-gradient-gold transition-all duration-700" style={{ width: pct(s.vendus - s.scannes) }} />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald-400" />Entrés ({s.scannes})</span>
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-gold" />Vendus, pas encore entrés ({s.vendus - s.scannes})</span>
-          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-line ring-1 ring-muted/40" />Disponibles ({s.restants})</span>
-        </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {s.par_type && ['prevente', 'jour_j'].map((t) => <Serie key={t} type={t} serie={s.par_type[t]} />)}
       </div>
+
+      <VenteGuichet evenement={ev} stats={s} onVente={() => { stats.reload(); liste.reload() }} />
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-line bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-4">
+          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1 rounded-xl bg-ink p-1">
+            {FILTRES_TYPE.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setFiltreType(f.id)}
+                className={`rounded-lg px-3.5 py-1.5 text-sm font-medium transition ${filtreType === f.id ? 'bg-gold/15 text-gold-light' : 'text-muted hover:text-cream'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-1 rounded-xl bg-ink p-1">
             {FILTRES.map((f) => (
               <button
@@ -118,6 +153,7 @@ export default function Admin() {
                 {f.label}
               </button>
             ))}
+          </div>
           </div>
           <label className="relative w-full sm:w-72">
             <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -140,7 +176,7 @@ export default function Admin() {
             <tbody className="divide-y divide-line/70">
               {tickets.map((t) => (
                 <tr key={t.id} className="transition hover:bg-surface-2/60">
-                  <td className="px-4 py-3 font-mono text-cream/80">{numeroFormat(t.numero, s.total)}</td>
+                  <td className={`px-4 py-3 font-mono ${typeBillet(t.type).accentClair}`}>{t.code}</td>
                   <td className="px-4 py-3">
                     {t.acheteur_nom ? (
                       <>

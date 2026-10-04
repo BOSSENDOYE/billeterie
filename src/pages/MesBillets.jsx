@@ -3,6 +3,7 @@ import { IconTicket, IconX } from '../components/Icons'
 import { btn, Spinner } from '../components/ui'
 import { api, usePolling } from '../lib/api'
 import { dateEvenement, numeroFormat } from '../lib/format'
+import { typeBillet } from '../lib/typesBillet'
 import { oublierBillet, useMesBillets } from '../lib/mesBillets'
 
 const STATUT = {
@@ -15,10 +16,13 @@ function CarteBillet({ billet }) {
   const { data, error } = usePolling(() => api.ticket(billet.id), [billet.id], 15000)
   const statut = STATUT[data?.ticket.statut]
   const d = dateEvenement(billet.date)
+  const th = typeBillet(billet.type ?? data?.ticket.type)
+  // Les billets mémorisés avant l'arrivée des deux séries n'ont pas de code : on le reconstitue
+  const code = data?.ticket.code ?? billet.code ?? numeroFormat(billet.numero, billet.capacite)
 
   function retirer(e) {
     e.preventDefault()
-    if (confirm(`Retirer le billet N° ${numeroFormat(billet.numero, billet.capacite)} de ce téléphone ?\nLe billet reste valide : vous pourrez le rouvrir avec son lien.`)) {
+    if (confirm(`Retirer le billet N° ${code} de ce téléphone ?\nLe billet reste valide : vous pourrez le rouvrir avec son lien.`)) {
       oublierBillet(billet.id)
     }
   }
@@ -27,15 +31,18 @@ function CarteBillet({ billet }) {
     <li>
       <Link
         to={`/billet/${billet.id}`}
-        className="flex items-center gap-4 rounded-2xl border border-gold/25 bg-surface p-4 transition hover:border-gold/60 active:scale-[.99]"
+        className={`flex items-center gap-4 rounded-2xl border bg-surface p-4 transition active:scale-[.99] ${th.bordure}`}
       >
-        <div className="rounded-xl border border-gold/50 px-3 py-2 text-center leading-none">
-          <p className="font-display text-2xl font-bold text-gold-light">{d.jour}</p>
+        <div className={`rounded-xl border px-3 py-2 text-center leading-none ${th.bordure}`}>
+          <p className={`font-display text-2xl font-bold ${th.accentClair}`}>{d.jour}</p>
           <p className="mt-0.5 text-[10px] font-bold tracking-widest">{d.mois}</p>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-display text-lg font-bold">{billet.artiste}</p>
-          <p className="truncate text-sm text-muted">{billet.nom} · N° {numeroFormat(billet.numero, billet.capacite)}</p>
+          <p className="flex items-center gap-2">
+            <span className="truncate font-display text-lg font-bold">{billet.artiste}</span>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wider ${th.badge}`}>{th.bandeau}</span>
+          </p>
+          <p className="truncate text-sm text-muted">{billet.nom} · N° {code}</p>
           <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold">
             {statut ? (
               <span className={`flex items-center gap-1.5 ${statut.classe}`}>

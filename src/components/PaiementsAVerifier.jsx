@@ -53,7 +53,12 @@ export default function PaiementsAVerifier({ onChange }) {
           {paiements.map((p) => (
             <li key={p.reference} className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4">
               <div className="min-w-40 flex-1">
-                <p className="font-medium">{p.nom}</p>
+                <p className="font-medium">
+                  {p.nom}{' '}
+                  <span className={`ml-1 rounded-full border px-2 py-0.5 align-middle text-[10px] font-bold tracking-wider ${p.type === 'jour_j' ? 'border-ruby/60 text-ruby-light' : 'border-gold/50 text-gold-light'}`}>
+                    {p.type === 'jour_j' ? 'JOUR J' : 'PRÉVENTE'}
+                  </span>
+                </p>
                 <p className="text-xs text-muted">Déclaré payé le {dateCourte(p.declare_le)} · {p.reference}</p>
               </div>
               <div className="min-w-44">

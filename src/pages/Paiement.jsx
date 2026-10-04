@@ -84,7 +84,7 @@ export default function Paiement() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">Paiement</p>
             <h1 className="mt-1 font-display text-2xl font-bold">{ev.artiste}</h1>
-            <p className="text-sm text-muted">Entrée générale · {p.nom}</p>
+            <p className="text-sm text-muted">Billet {p.type === 'jour_j' ? 'Jour J' : 'Prévente'} · {p.nom}</p>
           </div>
           <div className="text-right">
             <p className="font-display text-2xl font-bold text-gold-light">{formatPrix(p.montant)}</p>

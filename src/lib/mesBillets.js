@@ -41,6 +41,8 @@ export function memoriserBillet(ticket, evenement) {
   const entree = {
     id: ticket.id,
     numero: ticket.numero,
+    code: ticket.code,
+    type: ticket.type,
     nom: ticket.acheteur_nom,
     artiste: evenement.artiste,
     date: evenement.date,

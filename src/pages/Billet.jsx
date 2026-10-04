@@ -7,19 +7,21 @@ import { btn, ErrorState, PageLoader, Spinner } from '../components/ui'
 import { enregistrerImageBillet, genererImageBillet } from '../lib/billetImage'
 import { memoriserBillet } from '../lib/mesBillets'
 import { api, usePolling } from '../lib/api'
-import { dateCourte, dateEvenement, formatPrix, numeroFormat } from '../lib/format'
+import { dateCourte, dateEvenement, formatPrix } from '../lib/format'
+import { typeBillet } from '../lib/typesBillet'
 
-function Champ({ label, children, className = '' }) {
+function Champ({ label, children, className = '', couleur = 'text-gold/80' }) {
   return (
     <div className={`min-w-0 ${className}`}>
-      <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-gold/80 sm:text-[10px]">{label}</p>
+      <p className={`text-[9px] font-semibold uppercase tracking-[0.2em] sm:text-[10px] ${couleur}`}>{label}</p>
       <p className="truncate text-xs font-semibold text-cream sm:text-sm">{children}</p>
     </div>
   )
 }
 
 /** QR en plein écran sur fond blanc : grand et contrasté pour le scanner de l'entrée. */
-function QrPleinEcran({ ticket, total, onFermer }) {
+function QrPleinEcran({ ticket, onFermer }) {
+  const th = typeBillet(ticket.type)
   const fermerRef = useRef(onFermer)
   fermerRef.current = onFermer
   useEffect(() => {
@@ -35,9 +37,11 @@ function QrPleinEcran({ ticket, total, onFermer }) {
 
   return (
     <button onClick={onFermer} className="fixed inset-0 z-[70] flex animate-fade-in flex-col items-center justify-center bg-white p-4 text-center text-ink">
+      {/* Type de billet bien visible pour le contrôleur */}
+      <span className={`absolute inset-x-0 top-0 block py-3 text-2xl font-black tracking-[0.3em] ${th.pleinEcran}`}>{th.bandeau}</span>
       <QRCodeSVG value={ticket.qr} size={512} level="M" marginSize={4} fgColor="#000000" bgColor="#FFFFFF" className="h-auto w-[min(92vw,70vh)]" />
       <span className="mt-4 block text-lg font-bold">{ticket.acheteur_nom}</span>
-      <span className="block font-mono text-sm text-neutral-600">Billet N° {numeroFormat(ticket.numero, total)}</span>
+      <span className="block font-mono text-sm text-neutral-600">Billet N° {ticket.code}</span>
       <span className="mt-6 block max-w-xs text-sm text-neutral-500">Montez la luminosité de l'écran au maximum. Touchez pour fermer.</span>
     </button>
   )
@@ -87,12 +91,13 @@ export default function Billet() {
   const { ticket, evenement: ev } = data
   const d = dateEvenement(ev.date)
   const utilise = ticket.statut === 'utilise'
+  const th = typeBillet(ticket.type)
 
   const fermerQr = () => setQrGrand(false)
 
   async function enregistrer() {
     setMessage(null)
-    const nom = `billet-${String(ticket.numero).padStart(3, '0')}-${ev.artiste.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`
+    const nom = `billet-${ticket.code.split('/')[0].toLowerCase()}-${ev.artiste.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`
     try {
       let blob = imageRef.current
       if (!blob) {
@@ -110,7 +115,7 @@ export default function Billet() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
-      {qrGrand && <QrPleinEcran ticket={ticket} total={ev.capacite} onFermer={fermerQr} />}
+      {qrGrand && <QrPleinEcran ticket={ticket} onFermer={fermerQr} />}
       {state?.nouveau && (
         <div className="no-print mb-6 flex animate-fade-in items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-500 text-ink"><IconCheck className="h-5 w-5" /></span>
@@ -122,36 +127,37 @@ export default function Billet() {
       )}
 
       {/* Billet horizontal : partie principale + souche QR */}
-      <article ref={billetRef} className="print-ticket relative flex animate-pop overflow-hidden rounded-2xl bg-gradient-gold p-px shadow-2xl shadow-gold/10 sm:rounded-3xl">
+      <article ref={billetRef} className={`print-ticket relative flex animate-pop overflow-hidden rounded-2xl p-px shadow-2xl sm:rounded-3xl ${th.cadre}`}>
         <div className="flex w-full overflow-hidden rounded-[15px] bg-ink sm:rounded-[23px]">
           <div className="relative min-h-56 flex-1 overflow-hidden sm:min-h-80">
             <ArtistePhoto src={ev.image} alt={ev.artiste} />
             <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/20" />
             <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-transparent to-transparent" />
+            {th.teinte && <div className={`absolute inset-0 ${th.teinte}`} />}
             {!utilise && (
-              <div className="pointer-events-none absolute inset-y-0 w-1/3 animate-shine bg-gradient-to-r from-transparent via-gold-light/10 to-transparent" />
+              <div className={`pointer-events-none absolute inset-y-0 w-1/3 animate-shine bg-gradient-to-r from-transparent ${th.reflet} to-transparent`} />
             )}
 
             <div className="relative flex h-full flex-col justify-between gap-4 p-4 sm:p-7">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.3em] text-gold sm:text-[11px]">E-billet · Entrée générale</p>
+              <p className={`text-[9px] font-semibold uppercase tracking-[0.3em] sm:text-[11px] ${th.accent}`}>E-billet · {th.label}</p>
 
               <div>
                 <h1 className="font-display text-2xl font-extrabold leading-none sm:text-5xl">
-                  <span className="text-gradient-gold">{ev.artiste}</span>
+                  <span className={th.titre}>{ev.artiste}</span>
                 </h1>
                 <p className="mt-1.5 text-xs text-cream/70 sm:text-sm">{ev.lieu} — {ev.ville}</p>
               </div>
 
               <div className="flex items-center gap-3 sm:gap-4">
-                <div className="rounded-lg border border-gold/50 bg-ink/60 px-2.5 py-1.5 text-center leading-none backdrop-blur sm:rounded-xl sm:px-4 sm:py-2.5">
-                  <p className="font-display text-xl font-bold text-gold-light sm:text-3xl">{d.jour}</p>
+                <div className={`rounded-lg border bg-ink/60 ${th.bordure} px-2.5 py-1.5 text-center leading-none backdrop-blur sm:rounded-xl sm:px-4 sm:py-2.5`}>
+                  <p className={`font-display text-xl font-bold sm:text-3xl ${th.accentClair}`}>{d.jour}</p>
                   <p className="mt-0.5 text-[9px] font-bold tracking-widest text-cream sm:text-xs">{d.mois}</p>
                   <p className="text-[9px] text-muted sm:text-[10px]">{d.annee}</p>
                 </div>
                 <div className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2">
-                  <Champ label="Titulaire" className="col-span-2">{ticket.acheteur_nom}</Champ>
-                  <Champ label="Heure">{d.heure}</Champ>
-                  <Champ label="Prix">{formatPrix(ev.prix)}</Champ>
+                  <Champ label="Titulaire" className="col-span-2" couleur={th.champ}>{ticket.acheteur_nom}</Champ>
+                  <Champ label="Heure" couleur={th.champ}>{d.heure}</Champ>
+                  <Champ label="Prix" couleur={th.champ}>{formatPrix(ticket.prix)}</Champ>
                 </div>
               </div>
             </div>
@@ -159,16 +165,17 @@ export default function Billet() {
 
           {/* Perforation */}
           <div className="relative w-0">
-            <div className="absolute -left-3 -top-3 h-6 w-6 rounded-full bg-ink ring-1 ring-gold/60" />
-            <div className="absolute -bottom-3 -left-3 h-6 w-6 rounded-full bg-ink ring-1 ring-gold/60" />
-            <div className="absolute inset-y-5 left-0 border-l border-dashed border-gold/40" />
+            <div className={`absolute -left-3 -top-3 h-6 w-6 rounded-full bg-ink ring-1 ${th.anneau}`} />
+            <div className={`absolute -bottom-3 -left-3 h-6 w-6 rounded-full bg-ink ring-1 ${th.anneau}`} />
+            <div className={`absolute inset-y-5 left-0 border-l border-dashed ${th.pointilles}`} />
           </div>
 
           {/* Souche */}
-          <div className="flex w-32 shrink-0 flex-col items-center justify-center gap-2.5 bg-surface p-3 sm:w-56 sm:gap-4 sm:p-6">
+          <div className="relative flex w-32 shrink-0 flex-col items-center justify-center gap-2.5 bg-surface p-3 pt-9 sm:w-56 sm:gap-4 sm:p-6 sm:pt-14">
+            <span className={`absolute inset-x-0 top-0 py-1.5 text-center text-[11px] font-black tracking-[0.25em] sm:py-2.5 sm:text-base ${th.ruban}`}>{th.bandeau}</span>
             <div className="text-center">
               <p className="text-[9px] uppercase tracking-[0.2em] text-muted sm:text-[10px]">Billet N°</p>
-              <p className="font-mono text-sm font-bold text-gold-light sm:text-lg">{numeroFormat(ticket.numero, ev.capacite)}</p>
+              <p className={`font-mono text-sm font-bold sm:text-lg ${th.accentClair}`}>{ticket.code}</p>
             </div>
             <div
               role="button"

@@ -7,6 +7,16 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+
+class TypeBillet(models.TextChoices):
+    PREVENTE = 'prevente', 'Prévente'
+    JOUR_J = 'jour_j', 'Jour J'
+
+
+# Préfixe affiché devant le numéro : les deux séries de billets ne se confondent pas
+PREFIXES = {TypeBillet.PREVENTE: 'PV', TypeBillet.JOUR_J: 'JJ'}
 
 
 class Evenement(models.Model):
@@ -15,8 +25,12 @@ class Evenement(models.Model):
     date = models.DateTimeField()
     lieu = models.CharField(max_length=200)
     ville = models.CharField(max_length=100)
-    prix = models.PositiveIntegerField(help_text='En FCFA')
-    capacite = models.PositiveIntegerField(default=300)
+    prix = models.PositiveIntegerField(help_text='Prix prévente, en FCFA')
+    prix_jour_j = models.PositiveIntegerField(default=3000, help_text='Prix Jour J, en FCFA')
+    quota_prevente = models.PositiveIntegerField(default=400)
+    quota_jour_j = models.PositiveIntegerField(default=200)
+    fin_prevente = models.DateTimeField(null=True, blank=True, help_text='Après cette date, la vente en ligne passe au tarif Jour J')
+    capacite = models.PositiveIntegerField(default=600, help_text='Total des deux séries')
     image_url = models.CharField(max_length=300, blank=True, help_text='Ex : /artiste.jpeg')
     actif = models.BooleanField(default=True)
 
@@ -27,6 +41,19 @@ class Evenement(models.Model):
     def __str__(self):
         return self.titre
 
+    def type_en_vente(self, maintenant=None):
+        """Tarif appliqué à la vente : prévente jusqu'à fin_prevente, puis Jour J."""
+        maintenant = maintenant or timezone.now()
+        if self.fin_prevente and maintenant >= self.fin_prevente:
+            return TypeBillet.JOUR_J
+        return TypeBillet.PREVENTE
+
+    def prix_de(self, type_billet):
+        return self.prix_jour_j if type_billet == TypeBillet.JOUR_J else self.prix
+
+    def quota_de(self, type_billet):
+        return self.quota_jour_j if type_billet == TypeBillet.JOUR_J else self.quota_prevente
+
 
 class Ticket(models.Model):
     class Statut(models.TextChoices):
@@ -36,6 +63,7 @@ class Ticket(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     evenement = models.ForeignKey(Evenement, on_delete=models.CASCADE, related_name='tickets')
+    type = models.CharField(max_length=10, choices=TypeBillet.choices, default=TypeBillet.PREVENTE, db_index=True)
     numero = models.PositiveIntegerField()
     statut = models.CharField(max_length=12, choices=Statut.choices, default=Statut.DISPONIBLE, db_index=True)
     acheteur_nom = models.CharField(max_length=120, blank=True)
@@ -44,11 +72,20 @@ class Ticket(models.Model):
     date_scan = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ['numero']
-        constraints = [models.UniqueConstraint(fields=['evenement', 'numero'], name='ticket_numero_unique')]
+        ordering = ['type', 'numero']
+        constraints = [models.UniqueConstraint(fields=['evenement', 'type', 'numero'], name='ticket_type_numero_unique')]
 
     def __str__(self):
-        return f'{self.numero:03d}/{self.evenement.capacite}'
+        return self.code
+
+    @property
+    def code(self):
+        """Ex. « PV-042/400 » (prévente) ou « JJ-015/200 » (Jour J)."""
+        return f'{PREFIXES[self.type]}-{self.numero:03d}/{self.evenement.quota_de(self.type)}'
+
+    @property
+    def prix(self):
+        return self.evenement.prix_de(self.type)
 
     @property
     def signature(self):
@@ -119,6 +156,8 @@ class Paiement(models.Model):
     reference = models.CharField(max_length=20, unique=True, default=reference_paiement, editable=False)
     evenement = models.ForeignKey(Evenement, on_delete=models.PROTECT, related_name='paiements')
     ticket = models.OneToOneField(Ticket, on_delete=models.SET_NULL, null=True, blank=True, related_name='paiement')
+    type = models.CharField(max_length=10, choices=TypeBillet.choices, default=TypeBillet.PREVENTE)
+    canal = models.CharField(max_length=10, choices=[('en_ligne', 'En ligne'), ('guichet', 'Guichet')], default='en_ligne')
     nom = models.CharField(max_length=120)
     telephone = models.CharField(max_length=20)
     montant = models.PositiveIntegerField()

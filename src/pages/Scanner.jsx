@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { IconAlert, IconCamera, IconCheck, IconX } from '../components/Icons'
 import { btn, Logo, Spinner } from '../components/ui'
 import { api, usePolling } from '../lib/api'
-import { dateCourte, heure, numeroFormat } from '../lib/format'
+import { dateCourte, heure } from '../lib/format'
+import { typeBillet } from '../lib/typesBillet'
 import { demarrerScanner, prechargerLecteur } from '../lib/qrScanner'
 
 const RESULTATS = {
@@ -59,9 +60,14 @@ function Resultat({ res, onFermer }) {
       </span>
       <span className="mt-8 text-4xl font-black tracking-tight">{titre}</span>
       {res.ticket && (
+        <span className={`mt-6 block rounded-xl px-6 py-2 text-2xl font-black tracking-[0.25em] ${typeBillet(res.ticket.type).pleinEcran}`}>
+          {typeBillet(res.ticket.type).bandeau}
+        </span>
+      )}
+      {res.ticket && (
         <span className="mt-4 block space-y-1">
           <span className="block text-2xl font-bold">{res.ticket.acheteur_nom}</span>
-          <span className="block font-mono text-lg text-white/85">Billet N° {numeroFormat(res.ticket.numero)}</span>
+          <span className="block font-mono text-lg text-white/85">Billet N° {res.ticket.code}</span>
           {res.resultat === 'utilise' && (
             <span className="mt-4 block rounded-xl bg-black/25 px-4 py-2.5">
               Premier passage : <strong>{dateCourte(res.ticket.date_scan)}</strong>
@@ -278,7 +284,7 @@ export default function Scanner() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{sc.nom ?? 'Inconnu'}</p>
                     <p className="truncate text-xs text-muted">
-                      {sc.numero ? `N° ${numeroFormat(sc.numero)} · ` : ''}{r.court}{sc.raison ? ` · ${sc.raison}` : ''}
+                      {sc.code ? `${typeBillet(sc.type).label} ${sc.code.split('/')[0]} · ` : ''}{r.court}{sc.raison ? ` · ${sc.raison}` : ''}
                     </p>
                   </div>
                   <time className="text-xs tabular-nums text-muted">{heure(sc.scanne_le)}</time>

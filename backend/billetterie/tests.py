@@ -1,6 +1,8 @@
 import json
+from datetime import timedelta
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from .models import Ticket
 from .services import generer_demo
@@ -59,7 +61,9 @@ class ParcoursTest(TestCase):
         self.assertEqual(self.post('/api/staff/scan', {'qr': qr}, **STAFF).json()['resultat'], 'utilise')
 
         stats = self.client.get('/api/staff/stats', **STAFF).json()['stats']
-        self.assertEqual((stats['vendus'], stats['scannes'], stats['restants']), (1, 1, 299))
+        self.assertEqual((stats['vendus'], stats['scannes'], stats['restants']), (1, 1, 599))
+        self.assertEqual(stats['par_type']['prevente']['restants'], 399)
+        self.assertEqual(stats['par_type']['jour_j']['restants'], 200)
 
     def test_transaction_reutilisee_refusee(self):
         self.acheter('T_UNIQUE0001')
@@ -120,3 +124,53 @@ class ParcoursTest(TestCase):
     def test_telephone_invalide(self):
         r = self.post('/api/paiements', {'nom': 'Awa', 'telephone': '12345'})
         self.assertEqual(r.status_code, 400)
+
+    # --- Prévente / Jour J -------------------------------------------------
+
+    def passer_au_jour_j(self):
+        self.ev.fin_prevente = timezone.now() - timedelta(minutes=1)
+        self.ev.save()
+
+    def test_six_cents_places_en_deux_series(self):
+        self.assertEqual(Ticket.objects.filter(type='prevente').count(), 400)
+        self.assertEqual(Ticket.objects.filter(type='jour_j').count(), 200)
+
+    def test_prevente_avant_la_date(self):
+        tarif = self.client.get('/api/evenement').json()['tarif']
+        self.assertEqual((tarif['type'], tarif['prix'], tarif['restants']), ('prevente', 2500, 400))
+        ticket = self.client.get(f'/api/tickets/{self.acheter()}').json()['ticket']
+        self.assertEqual((ticket['type'], ticket['prix'], ticket['code']), ('prevente', 2500, 'PV-001/400'))
+
+    def test_jour_j_apres_la_date(self):
+        self.passer_au_jour_j()
+        p = self.creer()
+        self.assertEqual((p['type'], p['montant']), ('jour_j', 3000))
+        self.assertIn('amount=3000', p['wave_url'])
+        ticket = self.client.get(f'/api/tickets/{self.acheter()}').json()['ticket']
+        self.assertEqual((ticket['type'], ticket['code']), ('jour_j', 'JJ-001/200'))
+
+    def test_prevente_payee_puis_validee_le_jour_j_reste_prevente(self):
+        ref = self.creer()['reference']
+        self.post(f'/api/paiements/{ref}/declarer', {})
+        self.passer_au_jour_j()
+        p = self.post(f'/api/staff/paiements/{ref}/valider', {}, **STAFF).json()['paiement']
+        self.assertEqual(Ticket.objects.get(pk=p['ticket_id']).type, 'prevente')
+
+    def test_prevente_epuisee(self):
+        Ticket.objects.filter(type='prevente').update(statut='vendu')
+        r = self.post('/api/paiements', {'nom': 'Awa Ba', 'telephone': '771234567'})
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('Prévente épuisée', r.json()['erreur'])
+
+    def test_vente_guichet_entree_immediate(self):
+        r = self.post('/api/staff/vente-guichet', {'type': 'jour_j', 'nom': 'Moussa'}, **STAFF)
+        self.assertEqual(r.status_code, 201)
+        t = r.json()['ticket']
+        self.assertEqual((t['type'], t['statut'], t['code']), ('jour_j', 'utilise', 'JJ-001/200'))
+        # Le billet ne peut pas resservir
+        self.assertEqual(self.post('/api/staff/scan', {'qr': t['qr']}, **STAFF).json()['resultat'], 'utilise')
+        stats = self.client.get('/api/staff/stats', **STAFF).json()['stats']
+        self.assertEqual(stats['par_type']['jour_j']['recette'], 3000)
+
+    def test_vente_guichet_reservee_au_personnel(self):
+        self.assertEqual(self.post('/api/staff/vente-guichet', {'type': 'jour_j'}).status_code, 401)

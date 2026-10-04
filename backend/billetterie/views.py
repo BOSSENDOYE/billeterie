@@ -14,7 +14,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from . import services
-from .models import Paiement, Scan, Ticket
+from .models import Paiement, Scan, Ticket, TypeBillet
 
 TEL_RE = re.compile(r'^7[05678]\d{7}$')
 # ID de transaction Wave : lettres, chiffres, tirets et underscores
@@ -54,6 +54,11 @@ def ser_evenement(ev):
         'lieu': ev.lieu,
         'ville': ev.ville,
         'prix': ev.prix,
+        'prix_prevente': ev.prix,
+        'prix_jour_j': ev.prix_jour_j,
+        'quota_prevente': ev.quota_prevente,
+        'quota_jour_j': ev.quota_jour_j,
+        'fin_prevente': ev.fin_prevente.isoformat() if ev.fin_prevente else None,
         'capacite': ev.capacite,
         'image': ev.image_url,
     }
@@ -63,6 +68,9 @@ def ser_ticket(t, qr=False):
     data = {
         'id': str(t.id),
         'numero': t.numero,
+        'type': t.type,
+        'code': t.code,
+        'prix': t.prix,
         'statut': t.statut,
         'acheteur_nom': t.acheteur_nom or None,
         'acheteur_tel': t.acheteur_tel or None,
@@ -84,6 +92,8 @@ def ser_paiement(p):
         'nom': p.nom,
         'telephone': p.telephone,
         'montant': p.montant,
+        'type': p.type,
+        'canal': p.canal,
         'statut': p.statut,
         'transaction_wave': p.transaction_wave,
         'declare_le': p.declare_le.isoformat() if p.declare_le else None,
@@ -95,16 +105,39 @@ def ser_paiement(p):
 
 
 def stats(ev):
-    agg = ev.tickets.aggregate(
-        vendus=Count('pk', filter=~Q(statut=Ticket.Statut.DISPONIBLE)),
-        scannes=Count('pk', filter=Q(statut=Ticket.Statut.UTILISE)),
-    )
+    """Statistiques globales et par série (prévente / Jour J)."""
+    par_type = {}
+    for type_billet in TypeBillet.values:
+        agg = ev.tickets.filter(type=type_billet).aggregate(
+            vendus=Count('pk', filter=~Q(statut=Ticket.Statut.DISPONIBLE)),
+            scannes=Count('pk', filter=Q(statut=Ticket.Statut.UTILISE)),
+        )
+        quota = ev.quota_de(type_billet)
+        par_type[type_billet] = {
+            'total': quota,
+            'vendus': agg['vendus'],
+            'scannes': agg['scannes'],
+            'restants': quota - agg['vendus'],
+            'prix': ev.prix_de(type_billet),
+            'recette': agg['vendus'] * ev.prix_de(type_billet),
+        }
+    somme = lambda cle: sum(t[cle] for t in par_type.values())  # noqa: E731
     return {
-        'total': ev.capacite,
-        'vendus': agg['vendus'],
-        'scannes': agg['scannes'],
-        'restants': ev.capacite - agg['vendus'],
-        'recette': agg['vendus'] * ev.prix,
+        'total': somme('total'),
+        'vendus': somme('vendus'),
+        'scannes': somme('scannes'),
+        'restants': somme('restants'),
+        'recette': somme('recette'),
+        'par_type': par_type,
+    }
+
+
+def tarif_en_vente(ev):
+    type_billet = ev.type_en_vente()
+    return {
+        'type': type_billet,
+        'prix': ev.prix_de(type_billet),
+        'restants': stats(ev)['par_type'][type_billet]['restants'],
     }
 
 
@@ -122,9 +155,11 @@ def evenement(request):
     ev, err = evenement_ou_404()
     if err:
         return err
+    tarif = tarif_en_vente(ev)
     return JsonResponse({
         'evenement': ser_evenement(ev),
-        'restants': stats(ev)['restants'],
+        'tarif': tarif,
+        'restants': tarif['restants'],
         'paiement_simule': settings.PAIEMENT_SIMULE,
     })
 
@@ -142,11 +177,14 @@ def creer_paiement(request):
         return erreur('Nom invalide')
     if not TEL_RE.match(tel):
         return erreur('Numéro invalide : 9 chiffres commençant par 70, 75, 76, 77 ou 78')
-    if stats(ev)['restants'] == 0:
-        return erreur('Guichet fermé : tous les billets sont vendus', 409)
+    tarif = tarif_en_vente(ev)
+    if tarif['restants'] == 0:
+        message = ('Prévente épuisée : les billets Jour J seront en vente le jour du concert'
+                   if tarif['type'] == TypeBillet.PREVENTE else 'Complet : tous les billets Jour J sont vendus')
+        return erreur(message, 409)
 
     tel_fmt = f'{tel[:2]} {tel[2:5]} {tel[5:7]} {tel[7:]}'
-    p = Paiement.objects.create(evenement=ev, nom=nom, telephone=tel_fmt, montant=ev.prix)
+    p = Paiement.objects.create(evenement=ev, nom=nom, telephone=tel_fmt, type=tarif['type'], montant=tarif['prix'])
     return JsonResponse({'paiement': ser_paiement(p), 'evenement': ser_evenement(ev)}, status=201)
 
 
@@ -226,7 +264,7 @@ def staff_scan(request):
 @staff_requis
 @require_GET
 def staff_scans(request):
-    scans = Scan.objects.select_related('ticket')[:20]
+    scans = Scan.objects.select_related('ticket__evenement')[:20]
     return JsonResponse({'scans': [
         {
             'id': s.id,
@@ -235,6 +273,8 @@ def staff_scans(request):
             'scanne_le': s.scanne_le.isoformat(),
             'nom': s.ticket.acheteur_nom if s.ticket else None,
             'numero': s.ticket.numero if s.ticket else None,
+            'code': s.ticket.code if s.ticket else None,
+            'type': s.ticket.type if s.ticket else None,
         }
         for s in scans
     ]})
@@ -255,7 +295,10 @@ def staff_tickets(request):
     ev, err = evenement_ou_404()
     if err:
         return err
-    qs = ev.tickets.all()
+    qs = ev.tickets.select_related('evenement')
+    type_billet = request.GET.get('type', 'tous')
+    if type_billet in TypeBillet.values:
+        qs = qs.filter(type=type_billet)
     statut = request.GET.get('statut', 'tous')
     if statut == 'vendu':
         qs = qs.exclude(statut=Ticket.Statut.DISPONIBLE)
@@ -268,7 +311,7 @@ def staff_tickets(request):
             filtre |= Q(numero=int(q))
         qs = qs.filter(filtre)
     # Activité la plus récente en premier, puis numéro
-    qs = qs.order_by('-date_scan', '-date_achat', 'numero')
+    qs = qs.order_by('-date_scan', '-date_achat', 'type', 'numero')
     return JsonResponse({'tickets': [ser_ticket(t) for t in qs]})
 
 
@@ -276,7 +319,7 @@ def staff_tickets(request):
 @require_GET
 def staff_paiements(request):
     statut = request.GET.get('statut', Paiement.Statut.A_VERIFIER)
-    qs = Paiement.objects.select_related('ticket')
+    qs = Paiement.objects.select_related('ticket__evenement')
     if statut != 'tous':
         qs = qs.filter(statut=statut)
     qs = qs.order_by('declare_le', 'cree_le') if statut == Paiement.Statut.A_VERIFIER else qs.order_by('-maj_le')
@@ -284,6 +327,7 @@ def staff_paiements(request):
     for p in qs[:100]:
         d = ser_paiement(p)
         d['numero'] = p.ticket.numero if p.ticket else None
+        d['code'] = p.ticket.code if p.ticket else None
         ser.append(d)
     return JsonResponse({
         'paiements': ser,
@@ -312,3 +356,26 @@ def staff_rejeter_paiement(request, reference):
     p.statut = Paiement.Statut.ECHOUE
     p.save(update_fields=['statut', 'maj_le'])
     return JsonResponse({'paiement': ser_paiement(p)})
+
+
+@staff_requis
+@require_POST
+def staff_vente_guichet(request):
+    """Vente sur place : le billet est émis immédiatement (paiement encaissé par l'équipe)."""
+    ev, err = evenement_ou_404()
+    if err:
+        return err
+    data = corps(request)
+    type_billet = data.get('type') or ev.type_en_vente()
+    if type_billet not in TypeBillet.values:
+        return erreur('Type de billet invalide')
+    nom = str(data.get('nom', '')).strip()[:120]
+    tel = re.sub(r'\D', '', str(data.get('telephone', '')))
+    if tel and not TEL_RE.match(tel):
+        return erreur('Numéro invalide : 9 chiffres commençant par 70, 75, 76, 77 ou 78')
+    tel_fmt = f'{tel[:2]} {tel[2:5]} {tel[5:7]} {tel[7:]}' if tel else ''
+
+    ticket = services.vendre_guichet(ev, type_billet, nom, tel_fmt, bool(data.get('entree_immediate', True)))
+    if ticket is None:
+        return erreur(f'Plus aucun billet {TypeBillet(type_billet).label} disponible', 409)
+    return JsonResponse({'ticket': ser_ticket(ticket, qr=True), 'evenement': ser_evenement(ev)}, status=201)

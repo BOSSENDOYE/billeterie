@@ -10,7 +10,7 @@ Frontend React (Vite + Tailwind) à la racine, backend Django + MySQL dans `back
    cd backend
    .venv\Scripts\activate
    python manage.py migrate        # première fois
-   python manage.py seed_demo      # première fois uniquement : crée l'événement + 300 billets (EFFACE les ventes)
+   python manage.py seed_demo      # première fois uniquement : crée l'événement + 600 billets (EFFACE les ventes)
    python manage.py runserver 0.0.0.0:8000
    ```
 3. **Frontend** (terminal 2, à la racine) : `npm run dev` puis ouvrir http://localhost:5173
@@ -27,6 +27,16 @@ Frontend React (Vite + Tailwind) à la racine, backend Django + MySQL dans `back
 | `/django-admin/` | Admin Django (`python manage.py createsuperuser`) |
 
 Code d'accès personnel par défaut : `or2026` (variable `STAFF_ACCESS_CODE` dans `backend/.env`).
+
+## Billets
+
+| Série | Prix | Places | Numéros | Couleur |
+| --- | --- | --- | --- | --- |
+| Prévente | 2 500 FCFA | 400 | PV-001 → PV-400 | or |
+| Jour J | 3 000 FCFA | 200 | JJ-001 → JJ-200 | rubis |
+
+La vente en ligne passe automatiquement au tarif Jour J le 26 décembre à 00h00 (`fin_prevente`).
+Le tableau de bord permet aussi la vente au guichet (billet émis sur place, entrée enregistrée).
 
 ## Paiement Wave
 

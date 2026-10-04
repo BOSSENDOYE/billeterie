@@ -44,9 +44,14 @@ export default function Accueil() {
 
   const ev = data.evenement
   const d = dateEvenement(ev.date)
-  const restants = data.restants
-  const pctVendus = ((ev.capacite - restants) / ev.capacite) * 100
+  // Tarif en cours : prévente jusqu'à la veille du concert, puis Jour J
+  const tarif = data.tarif ?? { type: 'prevente', prix: ev.prix, restants: data.restants }
+  const enPrevente = tarif.type === 'prevente'
+  const quota = enPrevente ? ev.quota_prevente : ev.quota_jour_j
+  const restants = tarif.restants
+  const pctVendus = ((quota - restants) / quota) * 100
   const complet = restants === 0
+  const finPrevente = ev.fin_prevente && dateEvenement(new Date(new Date(ev.fin_prevente).getTime() - 60000).toISOString())
 
   async function payer(e) {
     e.preventDefault()
@@ -117,7 +122,8 @@ export default function Accueil() {
             <h2 className="font-display text-2xl font-bold">L'événement</h2>
             <p className="mt-3 max-w-prose leading-relaxed text-muted">
               {ev.artiste} investit le {ev.lieu.toLowerCase()} de {ev.ville} pour une soirée unique.
-              Places limitées à {ev.capacite} personnes, placement libre. Le billet est nominatif :
+              {ev.capacite} places : {ev.quota_prevente} en prévente à {formatPrix(ev.prix_prevente)}, puis {ev.quota_jour_j} le jour J
+              à {formatPrix(ev.prix_jour_j)}. Placement libre. Le billet est nominatif :
               présentez votre QR code à l'entrée, depuis votre téléphone ou imprimé.
             </p>
           </div>
@@ -148,21 +154,32 @@ export default function Accueil() {
         {/* Achat */}
         <aside className="order-1 lg:order-2 lg:-mt-32">
           <div className="sticky top-24 animate-fade-in rounded-2xl border border-gold/25 bg-surface/95 p-6 shadow-2xl shadow-black/60 backdrop-blur sm:p-7">
-            <div className="flex items-baseline justify-between">
-              <p className="text-sm text-muted">Entrée générale</p>
-              <p className="font-display text-3xl font-bold text-gold-light">{formatPrix(ev.prix)}</p>
+            {/* Deux tarifs : celui en cours est mis en avant */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className={`rounded-xl border p-3 ${enPrevente ? 'border-gold bg-gold/10' : 'border-line opacity-50'}`}>
+                <p className="text-[11px] font-bold tracking-[0.2em] text-gold">PRÉVENTE</p>
+                <p className="mt-1 font-display text-2xl font-bold text-gold-light">{formatPrix(ev.prix_prevente)}</p>
+                <p className="mt-0.5 text-[11px] text-muted">
+                  {enPrevente ? (finPrevente ? `Jusqu'au ${finPrevente.jour} ${finPrevente.mois.toLowerCase()} 23h59` : 'En cours') : 'Terminée'}
+                </p>
+              </div>
+              <div className={`rounded-xl border p-3 ${enPrevente ? 'border-line' : 'border-ruby bg-ruby/10'}`}>
+                <p className="text-[11px] font-bold tracking-[0.2em] text-ruby-light">JOUR J</p>
+                <p className={`mt-1 font-display text-2xl font-bold ${enPrevente ? 'text-cream/70' : 'text-ruby-light'}`}>{formatPrix(ev.prix_jour_j)}</p>
+                <p className="mt-0.5 text-[11px] text-muted">{enPrevente ? 'Le jour du concert' : 'En cours'}</p>
+              </div>
             </div>
 
             <div className="mt-5">
               <div className="flex justify-between text-xs">
-                <span className="text-muted">Places restantes</span>
+                <span className="text-muted">Places {enPrevente ? 'prévente' : 'Jour J'} restantes</span>
                 <span className="font-semibold tabular-nums">
                   <span className={restants < 30 ? 'text-red-400' : 'text-gold-light'}>{restants}</span>
-                  <span className="text-muted"> / {ev.capacite}</span>
+                  <span className="text-muted"> / {quota}</span>
                 </span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
-                <div className="h-full rounded-full bg-gradient-gold transition-all duration-700" style={{ width: `${pctVendus}%` }} />
+                <div className={`h-full rounded-full transition-all duration-700 ${enPrevente ? 'bg-gradient-gold' : 'bg-gradient-ruby'}`} style={{ width: `${pctVendus}%` }} />
               </div>
             </div>
 
@@ -181,7 +198,7 @@ export default function Accueil() {
               {erreur && <p className="animate-fade-in text-sm text-red-400">{erreur}</p>}
 
               <button disabled={complet || envoi} className="flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40">
-                {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : complet ? 'Complet' : <>Payer avec <span className="font-extrabold tracking-tight">Wave</span></>}
+                {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : complet ? (enPrevente ? 'Prévente épuisée' : 'Complet') : <>Payer {formatPrix(tarif.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
               </button>
               {envoi && data.paiement_simule && <p className="animate-fade-in text-center text-sm text-wave">Paiement Wave en cours…</p>}
               <p className="text-center text-xs text-muted">Billet nominatif, non remboursable.</p>
