@@ -93,6 +93,46 @@ def emettre_billets_physiques(ev):
     return list(Ticket.objects.filter(evenement=ev, type=TypeBillet.JOUR_J, physique=True).order_by('numero'))
 
 
+@transaction.atomic
+def reinitialiser_ticket(ticket):
+    """Annule l'usage d'un billet (tests, erreur de manipulation).
+
+    - Billet papier : il redevient valide (entrée annulée), il reste imprimé.
+    - Autre billet : il redevient disponible à la vente ; son paiement est marqué rejeté et détaché.
+    """
+    ticket = Ticket.objects.select_for_update().get(pk=ticket.pk)
+    Scan.objects.filter(ticket=ticket).delete()
+    if ticket.physique:
+        ticket.statut = Ticket.Statut.VENDU
+        ticket.date_scan = None
+        ticket.save(update_fields=['statut', 'date_scan'])
+        return ticket
+
+    Paiement.objects.filter(ticket=ticket).update(ticket=None, statut=Paiement.Statut.ECHOUE)
+    ticket.statut = Ticket.Statut.DISPONIBLE
+    ticket.acheteur_nom = ''
+    ticket.acheteur_tel = ''
+    ticket.date_achat = None
+    ticket.date_scan = None
+    ticket.save()
+    return ticket
+
+
+def billets_jour_j_de_test(ev):
+    """Billets Jour J à remettre à zéro : vendus hors papier, ou billets papier déjà scannés."""
+    jour_j = Ticket.objects.filter(evenement=ev, type=TypeBillet.JOUR_J)
+    return jour_j.filter(physique=False).exclude(statut=Ticket.Statut.DISPONIBLE) | jour_j.filter(
+        physique=True, statut=Ticket.Statut.UTILISE
+    )
+
+
+def reinitialiser_tests_jour_j(ev):
+    tickets = list(billets_jour_j_de_test(ev).order_by('numero'))
+    for t in tickets:
+        reinitialiser_ticket(t)
+    return [t.code for t in tickets]
+
+
 def _invalide(raison):
     Scan.objects.create(resultat=Scan.Resultat.INVALIDE, raison=raison)
     return {'resultat': 'invalide', 'raison': raison}

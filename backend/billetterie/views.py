@@ -115,6 +115,7 @@ def stats(ev):
             scannes=Count('pk', filter=Q(statut=Ticket.Statut.UTILISE)),
             physiques=Count('pk', filter=Q(physique=True)),
             physiques_entres=Count('pk', filter=Q(physique=True, statut=Ticket.Statut.UTILISE)),
+            hors_papier=Count('pk', filter=Q(physique=False) & ~Q(statut=Ticket.Statut.DISPONIBLE)),
         )
         quota = ev.quota_de(type_billet)
         prix = ev.prix_de(type_billet)
@@ -125,6 +126,8 @@ def stats(ev):
             'scannes': agg['scannes'],
             'restants': quota - agg['vendus'],
             'physiques': agg['physiques'],
+            'physiques_entres': agg['physiques_entres'],
+            'hors_papier': agg['hors_papier'],
             'prix': prix,
             # Paiements encaissés + billets papier présentés à l'entrée (vendus de la main à la main)
             'recette': encaisse + agg['physiques_entres'] * prix,
@@ -405,6 +408,75 @@ def staff_billets_physiques(request):
     tickets = services.emettre_billets_physiques(ev)
     if not tickets:
         return erreur("Aucun billet Jour J disponible pour l'impression", 409)
-    reponse = HttpResponse(generer_pdf(tickets, ev), content_type='application/pdf')
-    reponse['Content-Disposition'] = 'attachment; filename="billets-jour-j.pdf"'
+    return _pdf(generer_pdf(tickets, ev), 'billets-jour-j.pdf')
+
+
+def _pdf(contenu, nom):
+    reponse = HttpResponse(contenu, content_type='application/pdf')
+    reponse['Content-Disposition'] = f'attachment; filename="{nom}"'
     return reponse
+
+
+@staff_requis
+@require_POST
+def staff_apercu_papier(request):
+    """Aperçu du billet papier : une page (10 billets), sans rien émettre."""
+    from .impression import generer_pdf
+
+    ev, err = evenement_ou_404()
+    if err:
+        return err
+    tickets = list(ev.tickets.filter(type=TypeBillet.JOUR_J).order_by('numero')[:10])
+    return _pdf(generer_pdf(tickets, ev), 'apercu-billet-jour-j.pdf')
+
+
+@staff_requis
+def staff_design_papier(request):
+    """GET : design effectif + valeurs par défaut. POST {design} : enregistre (champ vide = défaut)."""
+    from .impression import CHAMPS_DESIGN, design_effectif, design_par_defaut
+
+    ev, err = evenement_ou_404()
+    if err:
+        return err
+    if request.method == 'POST':
+        recu = corps(request).get('design') or {}
+        design = {}
+        for cle, (libelle, longueur) in CHAMPS_DESIGN.items():
+            valeur = str(recu.get(cle, '')).strip()
+            if not valeur:
+                continue
+            if len(valeur) > longueur:
+                return erreur(f'{libelle} : {longueur} caractères maximum')
+            if cle == 'couleur' and not re.fullmatch(r'#[0-9A-Fa-f]{6}', valeur):
+                return erreur('Couleur invalide (format #RRGGBB)')
+            design[cle] = valeur
+        ev.design_papier = design
+        ev.save(update_fields=['design_papier'])
+    elif request.method != 'GET':
+        return erreur('Méthode non autorisée', 405)
+    return JsonResponse({
+        'design': design_effectif(ev),
+        'defaut': design_par_defaut(ev),
+        'champs': {cle: {'libelle': l, 'max': m} for cle, (l, m) in CHAMPS_DESIGN.items()},
+    })
+
+
+@staff_requis
+@require_POST
+def staff_reinitialiser_ticket(request, ticket_id):
+    t = get_object_or_404(Ticket.objects.select_related('evenement'), pk=ticket_id)
+    if t.statut == Ticket.Statut.DISPONIBLE:
+        return erreur('Ce billet est déjà disponible', 409)
+    t = services.reinitialiser_ticket(t)
+    return JsonResponse({'ticket': ser_ticket(t)})
+
+
+@staff_requis
+@require_POST
+def staff_reinitialiser_tests_jour_j(request):
+    """Remet à zéro les billets Jour J utilisés pour les tests (les 200 redeviennent utilisables)."""
+    ev, err = evenement_ou_404()
+    if err:
+        return err
+    codes = services.reinitialiser_tests_jour_j(ev)
+    return JsonResponse({'reinitialises': codes})

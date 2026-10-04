@@ -12,7 +12,6 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import simpleSplit
 from reportlab.pdfgen import canvas
 
-RUBIS = HexColor('#C8102E')
 NOIR = HexColor('#111111')
 GRIS = HexColor('#666666')
 COUPE = Color(0.6, 0.6, 0.6)
@@ -36,6 +35,41 @@ def _date(ev):
 
 def _prix(montant):
     return f"{montant:,}".replace(',', ' ') + ' FCFA'
+
+
+# --- Design personnalisable depuis le tableau de bord ---------------------------
+
+CHAMPS_DESIGN = {
+    # clé : (libellé, longueur max)
+    'bandeau': ('Bandeau vertical', 12),
+    'surtitre': ('Surtitre', 40),
+    'titre': ('Titre (artiste)', 40),
+    'date': ('Date et heure', 50),
+    'lieu': ('Lieu', 90),
+    'prix': ('Prix', 20),
+    'mention': ('Mention en bas', 45),
+    'couleur': ('Couleur principale', 7),
+}
+
+
+def design_par_defaut(ev):
+    return {
+        'bandeau': 'JOUR J',
+        'surtitre': 'BILLET  ·  JOUR J',
+        'titre': ev.artiste.upper(),
+        'date': _date(ev),
+        'lieu': f'{ev.lieu} — {ev.ville}',
+        'prix': _prix(ev.prix_jour_j),
+        'mention': 'Un billet = une entrée',
+        'couleur': '#C8102E',
+    }
+
+
+def design_effectif(ev):
+    """Valeurs par défaut, remplacées par celles enregistrées (champs non vides)."""
+    design = design_par_defaut(ev)
+    design.update({k: v for k, v in (ev.design_papier or {}).items() if k in CHAMPS_DESIGN and v})
+    return design
 
 
 def _qr(c, valeur, x, y, cote):
@@ -62,7 +96,8 @@ def _qr(c, valeur, x, y, cote):
                 j += 1
 
 
-def _billet(c, ticket, ev, x, y):
+def _billet(c, ticket, ev, x, y, design):
+    accent = HexColor(design['couleur'])
     # Traits de coupe (pointillés gris)
     c.setStrokeColor(COUPE)
     c.setDash(2, 2)
@@ -71,19 +106,19 @@ def _billet(c, ticket, ev, x, y):
     c.setDash()
 
     # Bande verticale « JOUR J »
-    c.setFillColor(RUBIS)
+    c.setFillColor(accent)
     c.rect(x, y, BANDE, H_BILLET, stroke=0, fill=1)
     c.saveState()
     c.translate(x + BANDE / 2 + 2.2 * mm, y + H_BILLET / 2)
     c.rotate(90)
     c.setFillColor(white)
     c.setFont('Helvetica-Bold', 13)
-    c.drawCentredString(0, 0, 'J O U R   J')
+    c.drawCentredString(0, 0, ' '.join(design['bandeau'].upper()))
     c.restoreState()
 
     # Souche : QR + numéro, séparée par un pointillé
     souche_x = x + L_BILLET - QR - 6 * mm
-    c.setStrokeColor(RUBIS)
+    c.setStrokeColor(accent)
     c.setDash(1.5, 2)
     c.line(souche_x - 2 * mm, y + 4 * mm, souche_x - 2 * mm, y + H_BILLET - 4 * mm)
     c.setDash()
@@ -92,46 +127,47 @@ def _billet(c, ticket, ev, x, y):
     c.setFont('Helvetica', 6.5)
     c.drawCentredString(souche_x + 1 * mm + QR / 2, y + 9.5 * mm, 'BILLET N°')
     c.setFont('Helvetica-Bold', 12)
-    c.setFillColor(RUBIS)
+    c.setFillColor(accent)
     c.drawCentredString(souche_x + 1 * mm + QR / 2, y + 4.5 * mm, ticket.code)
 
     # Partie principale
     gx = x + BANDE + 4 * mm
     largeur = souche_x - 4 * mm - gx
     haut = y + H_BILLET - 7 * mm
-    c.setFillColor(RUBIS)
+    c.setFillColor(accent)
     c.setFont('Helvetica-Bold', 6.5)
-    c.drawString(gx, haut, 'BILLET  ·  JOUR J')
+    c.drawString(gx, haut, design['surtitre'])
 
     c.setFillColor(NOIR)
     c.setFont('Helvetica-Bold', 14)
-    lignes = simpleSplit(ev.artiste.upper(), 'Helvetica-Bold', 14, largeur)
+    lignes = simpleSplit(design['titre'], 'Helvetica-Bold', 14, largeur)
     ty = haut - 7 * mm
     for ligne in lignes[:2]:
         c.drawString(gx, ty, ligne)
         ty -= 5.2 * mm
 
     c.setFont('Helvetica-Bold', 8)
-    c.drawString(gx, ty, _date(ev))
+    c.drawString(gx, ty, design['date'])
     ty -= 4 * mm
     c.setFillColor(GRIS)
     c.setFont('Helvetica', 7)
-    for ligne in simpleSplit(f'{ev.lieu} — {ev.ville}', 'Helvetica', 7, largeur)[:2]:
+    for ligne in simpleSplit(design['lieu'], 'Helvetica', 7, largeur)[:2]:
         c.drawString(gx, ty, ligne)
         ty -= 3.3 * mm
 
-    c.setFillColor(RUBIS)
+    c.setFillColor(accent)
     c.setFont('Helvetica-Bold', 13)
-    c.drawString(gx, y + 8 * mm, _prix(ev.prix_jour_j))
+    c.drawString(gx, y + 8 * mm, design['prix'])
     c.setFillColor(GRIS)
     c.setFont('Helvetica', 6)
-    c.drawString(gx, y + 4.3 * mm, 'Un billet = une entrée')
+    c.drawString(gx, y + 4.3 * mm, design['mention'])
 
 
 def generer_pdf(tickets, ev):
     """Retourne le PDF (bytes) des billets donnés, dans l'ordre."""
     tampon = BytesIO()
     c = canvas.Canvas(tampon, pagesize=A4)
+    design = design_effectif(ev)
     c.setTitle(f'Billets Jour J — {ev.artiste}')
     c.setAuthor('Guichet Billetterie')
     par_page = COLONNES * LIGNES
@@ -140,6 +176,6 @@ def generer_pdf(tickets, ev):
             c.showPage()
         rang = i % par_page
         col, lig = rang % COLONNES, rang // COLONNES
-        _billet(c, ticket, ev, MARGE_X + col * L_BILLET, A4[1] - MARGE_Y - (lig + 1) * H_BILLET)
+        _billet(c, ticket, ev, MARGE_X + col * L_BILLET, A4[1] - MARGE_Y - (lig + 1) * H_BILLET, design)
     c.save()
     return tampon.getvalue()

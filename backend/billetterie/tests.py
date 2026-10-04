@@ -217,3 +217,49 @@ class ParcoursTest(TestCase):
 
     def test_impression_reservee_au_personnel(self):
         self.assertEqual(self.client.post('/api/staff/billets-physiques').status_code, 401)
+
+    # --- Remise à zéro et design du billet papier -----------------------------
+
+    def test_remise_a_zero_des_tests_jour_j_rend_les_200_billets(self):
+        # Situation du serveur : 2 billets Jour J vendus au guichet pour tester
+        for nom in ('Test 1', 'Test 2'):
+            self.post('/api/staff/vente-guichet', {'type': 'jour_j', 'nom': nom}, **STAFF)
+        jj = self.client.get('/api/staff/stats', **STAFF).json()['stats']['par_type']['jour_j']
+        self.assertEqual(jj['hors_papier'], 2)
+
+        r = self.post('/api/staff/billets-jour-j/reinitialiser-tests', {}, **STAFF).json()
+        self.assertEqual(r['reinitialises'], ['JJ-001', 'JJ-002'])
+        self.imprimer()
+        self.assertEqual(Ticket.objects.filter(type='jour_j', physique=True, statut='vendu').count(), 200)
+
+    def test_remise_a_zero_billet_papier_scanne(self):
+        self.imprimer()
+        t = Ticket.objects.get(type='jour_j', numero=5)
+        self.post('/api/staff/scan', {'qr': t.qr_payload}, **STAFF)
+        self.post('/api/staff/billets-jour-j/reinitialiser-tests', {}, **STAFF)
+        t.refresh_from_db()
+        self.assertEqual((t.statut, t.physique, t.date_scan), ('vendu', True, None))
+        # Il rentre de nouveau
+        self.assertEqual(self.post('/api/staff/scan', {'qr': t.qr_payload}, **STAFF).json()['resultat'], 'valide')
+
+    def test_reinitialiser_un_billet_vendu_en_ligne(self):
+        ticket_id = self.acheter()
+        r = self.post(f'/api/staff/tickets/{ticket_id}/reinitialiser', {}, **STAFF)
+        self.assertEqual(r.json()['ticket']['statut'], 'disponible')
+        self.assertEqual(self.client.get(f'/api/tickets/{ticket_id}').status_code, 404)
+
+    def test_design_papier(self):
+        d = self.client.get('/api/staff/billets-physiques/design', **STAFF).json()
+        self.assertEqual(d['design']['bandeau'], 'JOUR J')
+        self.assertIn('19h', d['design']['date'])
+        r = self.post('/api/staff/billets-physiques/design', {'design': {'titre': 'DIP EN LIVE', 'couleur': '#112233'}}, **STAFF)
+        self.assertEqual((r.json()['design']['titre'], r.json()['design']['couleur']), ('DIP EN LIVE', '#112233'))
+        self.assertEqual(r.json()['design']['prix'], '3 000 FCFA')  # non modifié = défaut
+        bad = self.post('/api/staff/billets-physiques/design', {'design': {'couleur': 'rouge'}}, **STAFF)
+        self.assertEqual(bad.status_code, 400)
+
+    def test_apercu_sans_emission(self):
+        r = self.client.post('/api/staff/billets-physiques/apercu', **STAFF)
+        self.assertTrue(r.content.startswith(b'%PDF'))
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 1)
+        self.assertFalse(Ticket.objects.filter(physique=True).exists())

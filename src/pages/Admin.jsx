@@ -86,6 +86,20 @@ export default function Admin() {
   const { evenement: ev, stats: s } = stats.data
   const tickets = liste.data?.tickets ?? []
 
+  async function reinitialiser(t) {
+    const effet = t.physique
+      ? 'Le billet papier redevient valide (son entrée est annulée).'
+      : "Le billet redevient disponible à la vente : l'acheteur ne pourra plus l'utiliser."
+    if (!confirm(`Réinitialiser le billet ${t.code} (${t.acheteur_nom ?? ''}) ?\n\n${effet}`)) return
+    try {
+      await api.reinitialiserTicket(t.id)
+      stats.reload()
+      liste.reload()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
+
   // Lien du scanner à transmettre aux contrôleurs (sur le réseau local, remplacer localhost par l'IP du PC)
   const lienScan = `${window.location.origin}/scan`
   async function copierLienScan() {
@@ -128,7 +142,7 @@ export default function Admin() {
         {s.par_type && ['prevente', 'jour_j'].map((t) => <Serie key={t} type={t} serie={s.par_type[t]} />)}
       </div>
 
-      {s.par_type && <BilletsPapier evenement={ev} serie={s.par_type.jour_j} onImpression={() => { stats.reload(); liste.reload() }} />}
+      {s.par_type && <BilletsPapier evenement={ev} serie={s.par_type.jour_j} onChange={() => { stats.reload(); liste.reload() }} />}
 
       <VenteGuichet evenement={ev} stats={s} onVente={() => { stats.reload(); liste.reload() }} />
 
@@ -197,7 +211,10 @@ export default function Admin() {
                   <td className="px-4 py-3 tabular-nums text-muted">{dateCourte(t.date_scan)}</td>
                   <td className="px-4 py-3 text-right">
                     {t.statut !== 'disponible' && (
-                      <Link to={`/billet/${t.id}`} state={{ depuisAdmin: true }} className="text-xs font-semibold text-gold hover:text-gold-light">Voir le billet</Link>
+                      <span className="flex justify-end gap-3">
+                        <Link to={`/billet/${t.id}`} state={{ depuisAdmin: true }} className="text-xs font-semibold text-gold hover:text-gold-light">Voir</Link>
+                        <button onClick={() => reinitialiser(t)} className="text-xs font-semibold text-muted hover:text-amber-300">Réinitialiser</button>
+                      </span>
                     )}
                   </td>
                 </tr>

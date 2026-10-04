@@ -32,6 +32,8 @@ class Evenement(models.Model):
     fin_prevente = models.DateTimeField(null=True, blank=True, help_text='Après cette date, la vente en ligne passe au tarif Jour J')
     capacite = models.PositiveIntegerField(default=600, help_text='Total des deux séries')
     image_url = models.CharField(max_length=300, blank=True, help_text='Ex : /artiste.jpeg')
+    # Textes et couleur personnalisés du billet papier Jour J (vide = valeurs par défaut)
+    design_papier = models.JSONField(default=dict, blank=True)
     actif = models.BooleanField(default=True)
 
     class Meta:
