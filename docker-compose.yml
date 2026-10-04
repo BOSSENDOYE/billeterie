@@ -1,4 +1,4 @@
-# Billetterie — billet.cml-sst.com
+# Billetterie — billeteriecjics.com
 # Ports publiés uniquement en local (127.0.0.1) : seul le Nginx du VPS est exposé à Internet.
 #   1654 -> web (site React + relais API)   <- cible du Nginx du VPS
 #   1655 -> backend Django / Gunicorn

@@ -1,4 +1,4 @@
-# Déploiement sur le VPS Hostinger — billet.cml-sst.com
+# Déploiement sur le VPS Hostinger — billeteriecjics.com
 
 Architecture :
 
@@ -13,13 +13,16 @@ Les ports 1654, 1655 et 1657 n'écoutent que sur `127.0.0.1` : ils ne sont pas a
 
 ## 1. DNS (hPanel Hostinger)
 
-Domaines → cml-sst.com → DNS / Nameservers → ajouter :
+Domaines → billeteriecjics.com → DNS / Nameservers → ajouter :
 
 | Type | Nom | Valeur | TTL |
 | --- | --- | --- | --- |
-| A | `billet` | adresse IP du VPS | 3600 |
+| A | `@` | adresse IP du VPS | 3600 |
+| A | `www` | adresse IP du VPS | 3600 |
 
-Vérifier (peut prendre quelques minutes) : `ping billet.cml-sst.com`
+Supprimer les anciens enregistrements A / CNAME de `@` et `www` (page de parking Hostinger) s'il y en a.
+
+Vérifier (peut prendre quelques minutes) : `ping billeteriecjics.com`
 
 ## 2. Docker sur le VPS (si absent)
 
@@ -69,8 +72,8 @@ Les redémarrages suivants ne touchent pas aux ventes.
 ## 6. Nginx du VPS
 
 ```bash
-sudo cp deploy/nginx/billet.cml-sst.com.conf /etc/nginx/sites-available/billet.cml-sst.com
-sudo ln -s /etc/nginx/sites-available/billet.cml-sst.com /etc/nginx/sites-enabled/
+sudo cp deploy/nginx/billeteriecjics.com.conf /etc/nginx/sites-available/billeteriecjics.com
+sudo ln -s /etc/nginx/sites-available/billeteriecjics.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -78,17 +81,17 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx   # si absent
-sudo certbot --nginx -d billet.cml-sst.com
+sudo certbot --nginx -d billeteriecjics.com -d www.billeteriecjics.com
 ```
 
-Le site est alors sur **https://billet.cml-sst.com**.
+Le site est alors sur **https://billeteriecjics.com**.
 
 | Page | Adresse |
 | --- | --- |
-| Billetterie | https://billet.cml-sst.com |
-| Scanner (équipe) | https://billet.cml-sst.com/scan |
-| Tableau de bord | https://billet.cml-sst.com/admin |
-| Admin Django | https://billet.cml-sst.com/django-admin/ (`sudo docker compose exec backend python manage.py createsuperuser`) |
+| Billetterie | https://billeteriecjics.com |
+| Scanner (équipe) | https://billeteriecjics.com/scan |
+| Tableau de bord | https://billeteriecjics.com/admin |
+| Admin Django | https://billeteriecjics.com/django-admin/ (`sudo docker compose exec backend python manage.py createsuperuser`) |
 
 ## Mises à jour
 

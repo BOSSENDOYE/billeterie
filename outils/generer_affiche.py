@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 PROJET = str(Path(__file__).resolve().parent.parent)
 SORTIE = PROJET + '/public/affiche.jpg'
-URL = 'https://billet.cml-sst.com'
+URL = 'https://billeteriecjics.com'
 
 W, H = 2480, 3508
 NOIR = (10, 10, 11)
@@ -140,7 +140,7 @@ def main():
     # Jour J
     d.text((gx, haut + 510), 'JOUR J', font=bahn(68, 'Bold'), fill=GRIS)
     d.text((gx, haut + 580), '3 000 FCFA', font=bahn(120, 'Bold'), fill=CREME)
-    d.text((gx, haut + 745), '300 places seulement', font=bahn(58, 'Regular'), fill=GRIS)
+    d.text((gx, haut + 745), '600 places seulement', font=bahn(58, 'Regular'), fill=GRIS)
 
     # QR code (correction H : reste lisible même abîmé, froissé ou mal imprimé)
     q = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H, border=2, box_size=24)
@@ -158,7 +158,7 @@ def main():
     d.text((qx + cote / 2 - d.textlength(legende, font=f) / 2, qy + cote + 45), legende, font=f, fill=OR_CLAIR)
 
     # --- Pied de page
-    texte_centre(d, haut + hauteur + 55, 'billet.cml-sst.com', bahn(84, 'SemiBold'), CREME, lettrage=4)
+    texte_centre(d, haut + hauteur + 55, 'billeteriecjics.com', bahn(84, 'SemiBold'), CREME, lettrage=4)
     texte_centre(d, H - 105, 'Billet nominatif à QR code  ·  Un billet = une entrée', bahn(50, 'Regular'), GRIS)
 
     affiche.save(SORTIE, 'JPEG', quality=92, optimize=True, progressive=True, dpi=(300, 300))
