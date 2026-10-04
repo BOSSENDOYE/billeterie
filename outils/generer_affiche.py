@@ -1,8 +1,9 @@
-"""Affiches paysage « photo plein cadre » (300 dpi) — Dip Doundou Guiss, Mboro — CJICS présente.
+"""Affiches et flyer « photo plein cadre » (300 dpi) — Dip Doundou Guiss, Mboro — CJICS présente.
 
 Génère :
     public/affiche.jpg         A3 paysage (42 x 29,7 cm)  — servie sur le site (/affiche.jpg)
     public/affiche-40x30.jpg   40 x 30 cm paysage
+    public/flyer-a5.jpg        flyer A5 portrait (14,8 x 21 cm)
 
 Usage (depuis la racine du projet, sous Windows pour les polices) :
     pip install qrcode pillow numpy
@@ -211,10 +212,89 @@ def generer(nom, largeur_mm, hauteur_mm, source):
     print(f'{nom} : {W} x {H} px ({largeur_mm / 10:g} x {hauteur_mm / 10:g} cm à {DPI} dpi)')
 
 
+def generer_flyer(nom, largeur_mm, hauteur_mm, source):
+    """Flyer portrait : photo en haut, informations dans la moitié basse."""
+    W, H = round(largeur_mm / 25.4 * DPI), round(hauteur_mm / 25.4 * DPI)
+    u = H / 100
+
+    # Photo couvrant toute la hauteur, recadrée sur l'artiste
+    echelle = max(W / source.width, H / source.height)
+    pw, ph = int(source.width * echelle), int(source.height * echelle)
+    photo = source.resize((pw, ph), Image.LANCZOS)
+    gauche = int(np.clip(0.47 * pw - W / 2, 0, pw - W))
+    affiche = photo.crop((gauche, 0, gauche + W, H))
+    affiche = ImageEnhance.Contrast(affiche).enhance(1.12)
+    affiche = affiche.filter(ImageFilter.UnsharpMask(radius=3, percent=70, threshold=2))
+
+    xs = np.linspace(0, 1, W)[None, :]
+    ys = np.linspace(0, 1, H)[:, None]
+    voile = np.maximum(np.clip((ys - 0.40) / 0.16, 0, 1) ** 1.1 * 0.93, np.clip((0.12 - ys) / 0.12, 0, 1) * 0.75)
+    voile = np.maximum(voile, np.clip(np.abs(xs - 0.5) - 0.36, 0, 1) * 2.2)
+    assombrir(affiche, voile)
+    halo = np.exp(-(((xs - 0.75) / 0.35) ** 2 + ((ys - 0.04) / 0.25) ** 2))
+    lumiere = np.array(affiche).astype(float) + halo[..., None] * np.array([60, 45, 8])
+    grain = np.random.default_rng(5).normal(0, 4, (H, W, 1))
+    affiche = Image.fromarray(np.clip(lumiere + grain, 0, 255).astype('uint8'), 'RGB')
+
+    d = ImageDraw.Draw(affiche)
+    marge = int(5.5 * u * W / H * 1.4)
+    cx = W / 2
+
+    # Bandeau
+    f_org = serif(5.2 * u)
+    d.text((marge, 2.6 * u), ORGANISATEUR, font=f_org, fill=OR_CLAIR)
+    texte(d, marge + d.textlength(ORGANISATEUR, font=f_org) + 1.4 * u, 4.6 * u, 'PRÉSENTE', bahn(1.8 * u, 'SemiBold'), CREME, lettrage=0.35 * u)
+
+    # Nom, date, lieu
+    largeur_utile = W - 2 * marge
+    texte(d, cx, 47 * u, 'EN CONCERT LIVE', bahn(2.2 * u, 'Bold'), OR, lettrage=0.6 * u, ancre='centre')
+    _, _, _, y = texte_or(affiche, cx, 50.5 * u, 'DIP DOUNDOU', taille_ajustee('DIP DOUNDOU', serif, 8 * u, largeur_utile), ancre='centre', ombre=16)
+    _, _, _, y = texte_or(affiche, cx, y + 1 * u, 'GUISS', serif(9.5 * u), ancre='centre', ombre=16)
+    d = ImageDraw.Draw(affiche)
+    date = 'SAMEDI 26 DÉCEMBRE 2026  ·  19H'
+    texte(d, cx, y + 2.6 * u, date, taille_ajustee(date, lambda t: bahn(t, 'Bold'), 3 * u, largeur_utile), CREME, ancre='centre')
+    lieu = 'Terrain de tennis de la Cité Mbaye Mbaye  ·  MBORO'
+    texte(d, cx, y + 6.8 * u, lieu, taille_ajustee(lieu, lambda t: bahn(t, 'SemiBold'), 2 * u, largeur_utile), OR_CLAIR, ancre='centre')
+
+    # Tarifs (gauche) + QR (droite)
+    haut_bloc = y + 10 * u
+    cote = int(13 * u)
+    qx, qy = W - marge - cote, int(haut_bloc)
+    d.rounded_rectangle([qx - 0.8 * u, qy - 0.8 * u, qx + cote + 0.8 * u, qy + cote + 0.8 * u], radius=int(0.9 * u), fill='white', outline=OR, width=max(3, int(0.25 * u)))
+    q = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H, border=2, box_size=24)
+    q.add_data(URL)
+    q.make(fit=True)
+    affiche.paste(q.make_image(fill_color='black', back_color='white').convert('RGB').resize((cote, cote), Image.NEAREST), (qx, qy))
+    d = ImageDraw.Draw(affiche)
+    texte(d, qx + cote / 2, qy + cote + 1.5 * u, 'SCANNEZ & RÉSERVEZ', bahn(1.45 * u, 'Bold'), OR_CLAIR, ancre='centre')
+
+    yt = haut_bloc + 0.6 * u
+    for etiquette, couleur, prix, couleur_prix in (('PRÉVENTE', OR, '2 500 FCFA', OR_CLAIR), ('JOUR J', RUBIS, '3 000 FCFA', CREME)):
+        texte(d, marge, yt, etiquette, bahn(1.9 * u, 'Bold'), couleur, lettrage=0.25 * u)
+        d.text((marge, yt + 2.2 * u), prix, font=bahn(4.1 * u, 'Bold'), fill=couleur_prix)
+        yt += 6.8 * u
+    texte(d, marge, yt - 0.4 * u, SITE, bahn(1.9 * u, 'SemiBold'), GRIS)
+
+    # Infoline
+    yl = 90.3 * u
+    d.line([(marge, yl), (W - marge, yl)], fill=OR_FONCE, width=max(3, int(0.18 * u)))
+    numeros = '   ·   '.join(INFOLINE)
+    f_label = bahn(1.7 * u, 'Bold')
+    lw = d.textlength('INFOLINE', font=f_label)
+    d.rounded_rectangle([cx - lw / 2 - 1 * u, yl + 1.2 * u, cx + lw / 2 + 1 * u, yl + 3.8 * u], radius=int(0.5 * u), fill=OR)
+    texte(d, cx, yl + 1.55 * u, 'INFOLINE', f_label, NOIR, ancre='centre')
+    texte(d, cx, yl + 4.4 * u, numeros, taille_ajustee(numeros, lambda t: bahn(t, 'Bold'), 2.3 * u, largeur_utile), CREME, ancre='centre')
+
+    chemin = PROJET / 'public' / nom
+    affiche.save(chemin, 'JPEG', quality=93, optimize=True, progressive=True, dpi=(DPI, DPI))
+    print(f'{nom} : {W} x {H} px ({largeur_mm / 10:g} x {hauteur_mm / 10:g} cm à {DPI} dpi)')
+
+
 def main():
     source = Image.open(PROJET / 'public' / 'artiste.jpeg').convert('RGB')
     for nom, (l, h) in FORMATS.items():
         generer(nom, l, h, source)
+    generer_flyer('flyer-a5.jpg', 148, 210, source)
 
 
 if __name__ == '__main__':
