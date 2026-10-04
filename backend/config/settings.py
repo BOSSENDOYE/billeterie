@@ -32,7 +32,7 @@ STAFF_ACCESS_CODE = os.getenv('STAFF_ACCESS_CODE', 'or2026')
 # Mode démonstration : « Payer avec Wave » valide le paiement immédiatement, sans passer par Wave.
 # À mettre à 0 pour les vraies ventes.
 PAIEMENT_SIMULE = os.getenv('PAIEMENT_SIMULE', '0') == '1'
-WAVE_MERCHANT_URL = os.getenv('WAVE_MERCHANT_URL', 'https://pay.wave.com/m/M_sn_VU2qAQOJ_dLv/c/sn/')
+WAVE_MERCHANT_URL = os.getenv('WAVE_MERCHANT_URL', 'https://pay.wave.com/m/M_sn_mv6AS9iOxirH/c/sn/')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
