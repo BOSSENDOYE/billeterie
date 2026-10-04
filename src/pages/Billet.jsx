@@ -10,11 +10,11 @@ import { api, usePolling } from '../lib/api'
 import { dateCourte, dateEvenement, formatPrix } from '../lib/format'
 import { typeBillet } from '../lib/typesBillet'
 
-function Champ({ label, children, className = '', couleur = 'text-gold/80' }) {
+function Champ({ label, children, className = '', couleur = 'text-gold/80', tronquer = true }) {
   return (
     <div className={`min-w-0 ${className}`}>
       <p className={`text-[9px] font-semibold uppercase tracking-[0.2em] sm:text-[10px] ${couleur}`}>{label}</p>
-      <p className="truncate text-xs font-semibold text-cream sm:text-sm">{children}</p>
+      <p className={`text-xs font-semibold text-cream sm:text-sm ${tronquer ? 'truncate' : 'leading-tight'}`}>{children}</p>
     </div>
   )
 }
@@ -129,7 +129,7 @@ export default function Billet() {
       {/* Billet horizontal : partie principale + souche QR */}
       <article ref={billetRef} className={`print-ticket relative flex animate-pop overflow-hidden rounded-2xl p-px shadow-2xl sm:rounded-3xl ${th.cadre}`}>
         <div className="flex w-full overflow-hidden rounded-[15px] bg-ink sm:rounded-[23px]">
-          <div className="relative min-h-56 flex-1 overflow-hidden sm:min-h-80">
+          <div className="relative min-h-56 min-w-0 flex-1 overflow-hidden sm:min-h-80">
             <ArtistePhoto src={ev.image} alt={ev.artiste} />
             <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/20" />
             <div className="absolute inset-0 bg-gradient-to-t from-ink/90 via-transparent to-transparent" />
@@ -142,7 +142,7 @@ export default function Billet() {
               <p className={`text-[9px] font-semibold uppercase tracking-[0.3em] sm:text-[11px] ${th.accent}`}>E-billet · {th.label}</p>
 
               <div>
-                <h1 className="font-display text-2xl font-extrabold leading-none sm:text-5xl">
+                <h1 className="break-words font-display text-[1.6rem] font-extrabold leading-[0.95] sm:text-5xl">
                   <span className={th.titre}>{ev.artiste}</span>
                 </h1>
                 <p className="mt-1.5 text-xs text-cream/70 sm:text-sm">{ev.lieu} — {ev.ville}</p>
@@ -157,7 +157,7 @@ export default function Billet() {
                 <div className="grid flex-1 grid-cols-2 gap-x-3 gap-y-2">
                   <Champ label="Titulaire" className="col-span-2" couleur={th.champ}>{ticket.acheteur_nom}</Champ>
                   <Champ label="Heure" couleur={th.champ}>{d.heure}</Champ>
-                  <Champ label="Prix" couleur={th.champ}>{formatPrix(ticket.prix)}</Champ>
+                  <Champ label="Prix" couleur={th.champ} tronquer={false}>{formatPrix(ticket.prix)}</Champ>
                 </div>
               </div>
             </div>
