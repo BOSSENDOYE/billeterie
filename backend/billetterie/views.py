@@ -46,8 +46,8 @@ def staff_requis(view):
     return csrf_exempt(wrapper)
 
 
-def ser_evenement(ev):
-    return {
+def ser_evenement(ev, prive=False):
+    data = {
         'id': ev.id,
         'artiste': ev.artiste,
         'titre': ev.titre,
@@ -63,6 +63,11 @@ def ser_evenement(ev):
         'capacite': ev.capacite,
         'image': ev.image_url,
     }
+    if not prive:
+        # Chiffres de la jauge privés : visibles seulement dans le tableau de bord
+        for cle in ('capacite', 'quota_prevente', 'quota_jour_j'):
+            data.pop(cle)
+    return data
 
 
 def ser_ticket(t, qr=False):
@@ -169,8 +174,13 @@ def evenement(request):
     tarif = tarif_en_vente(ev)
     return JsonResponse({
         'evenement': ser_evenement(ev),
-        'tarif': tarif,
-        'restants': tarif['restants'],
+        # Pas de nombre de places en public : seulement « complet » / « dernières places »
+        'tarif': {
+            'type': tarif['type'],
+            'prix': tarif['prix'],
+            'complet': tarif['restants'] == 0,
+            'dernieres_places': 0 < tarif['restants'] < 30,
+        },
         # En ligne : prévente uniquement. Les billets Jour J sont vendus en papier, sur place.
         'vente_en_ligne': tarif['type'] == TypeBillet.PREVENTE,
         'paiement_simule': settings.PAIEMENT_SIMULE,
@@ -303,7 +313,7 @@ def staff_stats(request):
     ev, err = evenement_ou_404()
     if err:
         return err
-    return JsonResponse({'evenement': ser_evenement(ev), 'stats': stats(ev)})
+    return JsonResponse({'evenement': ser_evenement(ev, prive=True), 'stats': stats(ev)})
 
 
 @staff_requis
@@ -395,7 +405,7 @@ def staff_vente_guichet(request):
     ticket = services.vendre_guichet(ev, type_billet, nom, tel_fmt, bool(data.get('entree_immediate', True)))
     if ticket is None:
         return erreur(f'Plus aucun billet {TypeBillet(type_billet).label} disponible', 409)
-    return JsonResponse({'ticket': ser_ticket(ticket, qr=True), 'evenement': ser_evenement(ev)}, status=201)
+    return JsonResponse({'ticket': ser_ticket(ticket, qr=True), 'evenement': ser_evenement(ev, prive=True)}, status=201)
 
 
 @staff_requis

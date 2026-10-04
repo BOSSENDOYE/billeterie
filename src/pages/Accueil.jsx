@@ -45,12 +45,9 @@ export default function Accueil() {
   const ev = data.evenement
   const d = dateEvenement(ev.date)
   // Tarif en cours : prévente jusqu'à la veille du concert, puis Jour J
-  const tarif = data.tarif ?? { type: 'prevente', prix: ev.prix, restants: data.restants }
+  const tarif = data.tarif ?? { type: 'prevente', prix: ev.prix }
   const enPrevente = tarif.type === 'prevente'
-  const quota = enPrevente ? ev.quota_prevente : ev.quota_jour_j
-  const restants = tarif.restants
-  const pctVendus = ((quota - restants) / quota) * 100
-  const complet = restants === 0
+  const complet = Boolean(tarif.complet)
   const finPrevente = ev.fin_prevente && dateEvenement(new Date(new Date(ev.fin_prevente).getTime() - 60000).toISOString())
 
   // Mêmes règles que le serveur : un paiement Wave ne doit pas partir pour un formulaire refusé ensuite
@@ -147,9 +144,8 @@ export default function Accueil() {
           <div>
             <h2 className="font-display text-2xl font-bold">L'événement</h2>
             <p className="mt-3 max-w-prose leading-relaxed text-muted">
-              {ev.artiste} investit le {ev.lieu.toLowerCase()} de {ev.ville} pour une soirée unique.
-              {ev.capacite} places : {ev.quota_prevente} en prévente à {formatPrix(ev.prix_prevente)}, puis {ev.quota_jour_j} le jour J
-              à {formatPrix(ev.prix_jour_j)}. Placement libre. Le billet est nominatif :
+              {ev.artiste} investit le {ev.lieu.charAt(0).toLowerCase() + ev.lieu.slice(1)} de {ev.ville} pour une soirée unique.
+              Prévente à {formatPrix(ev.prix_prevente)}, puis {formatPrix(ev.prix_jour_j)} le jour J. Placement libre. Le billet est nominatif :
               présentez votre QR code à l'entrée, depuis votre téléphone ou imprimé.
             </p>
           </div>
@@ -196,18 +192,10 @@ export default function Accueil() {
               </div>
             </div>
 
-            <div className="mt-5">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted">Places {enPrevente ? 'prévente' : 'Jour J'} restantes</span>
-                <span className="font-semibold tabular-nums">
-                  <span className={restants < 30 ? 'text-red-400' : 'text-gold-light'}>{restants}</span>
-                  <span className="text-muted"> / {quota}</span>
-                </span>
-              </div>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
-                <div className={`h-full rounded-full transition-all duration-700 ${enPrevente ? 'bg-gradient-gold' : 'bg-gradient-ruby'}`} style={{ width: `${pctVendus}%` }} />
-              </div>
-            </div>
+            {/* Pas de chiffres publics sur la jauge : seulement une alerte quand il reste peu de places */}
+            <p className={`mt-5 text-center text-xs font-semibold tracking-wide ${tarif.dernieres_places ? 'text-red-400' : 'text-gold-light/80'}`}>
+              {tarif.dernieres_places ? 'Dernières places disponibles' : 'Places limitées'}
+            </p>
 
             {data.vente_en_ligne === false ? (
               <div className="mt-6 rounded-xl border border-ruby/50 bg-ruby/10 p-5 text-center">

@@ -143,8 +143,11 @@ class ParcoursTest(TestCase):
         self.assertEqual(Ticket.objects.filter(type='jour_j').count(), 200)
 
     def test_prevente_avant_la_date(self):
-        tarif = self.client.get('/api/evenement').json()['tarif']
-        self.assertEqual((tarif['type'], tarif['prix'], tarif['restants']), ('prevente', 2500, 400))
+        d = self.client.get('/api/evenement').json()
+        self.assertEqual((d['tarif']['type'], d['tarif']['prix'], d['tarif']['complet']), ('prevente', 2500, False))
+        # Jauge privée : aucun chiffre de places dans l'API publique
+        self.assertNotIn('restants', d['tarif'])
+        self.assertFalse({'capacite', 'quota_prevente', 'quota_jour_j'} & set(d['evenement']))
         ticket = self.client.get(f'/api/tickets/{self.acheter()}').json()['ticket']
         self.assertEqual((ticket['type'], ticket['prix'], ticket['code']), ('prevente', 2500, 'PV-001'))
 

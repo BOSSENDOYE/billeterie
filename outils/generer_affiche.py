@@ -19,7 +19,7 @@ PROJET = Path(__file__).resolve().parent.parent
 URL = 'https://billeteriecjics.com'
 SITE = 'billeteriecjics.com'
 ORGANISATEUR = 'CJICS'
-INFOLINE = ['+221 71 161 95 47', '+221 77 370 01 07', '+221 78 602 95 98']
+INFOLINE = ['+221 71 161 95 47', '+221 77 370 91 07', '+221 78 602 95 98']
 
 DPI = 300
 FORMATS = {
