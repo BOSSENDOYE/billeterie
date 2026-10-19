@@ -4,7 +4,7 @@ import { formatPrix } from '../lib/format'
 import { IconDownload, IconRefresh } from './Icons'
 import { btn, input, Spinner } from './ui'
 
-const ORDRE = ['bandeau', 'surtitre', 'titre', 'date', 'lieu', 'prix', 'mention']
+const ORDRE = ['bandeau', 'surtitre', 'titre', 'lieu', 'prix', 'mention']
 
 /** Éditeur des textes et de la couleur du billet papier (les QR codes ne changent pas). */
 function EditeurDesign({ type }) {

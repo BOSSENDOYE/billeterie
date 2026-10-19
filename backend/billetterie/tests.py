@@ -260,7 +260,7 @@ class ParcoursTest(TestCase):
     def test_design_papier(self):
         d = self.client.get('/api/staff/billets-physiques/design', **STAFF).json()
         self.assertEqual(d['design']['bandeau'], 'JOUR J')
-        self.assertIn('19h', d['design']['date'])
+        self.assertEqual(d['design']['titre'], 'Dip Doundou Guiss')
         r = self.post('/api/staff/billets-physiques/design', {'design': {'titre': 'DIP EN LIVE', 'couleur': '#112233'}}, **STAFF)
         self.assertEqual((r.json()['design']['titre'], r.json()['design']['couleur']), ('DIP EN LIVE', '#112233'))
         self.assertEqual(r.json()['design']['prix'], '3 000 FCFA')  # non modifié = défaut
@@ -311,7 +311,7 @@ class ParcoursTest(TestCase):
         self.assertEqual((d['bandeau'], d['prix']), ('PRÉVENTE', '2 500 FCFA'))
         self.post('/api/staff/billets-physiques/design?type=prevente', {'design': {'titre': 'DIP + DJ DANY'}}, **STAFF)
         jj = self.client.get('/api/staff/billets-physiques/design?type=jour_j', **STAFF).json()['design']
-        self.assertEqual((jj['titre'], jj['bandeau']), ('DIP DOUNDOU GUISS', 'JOUR J'))
+        self.assertEqual((jj['titre'], jj['bandeau']), ('Dip Doundou Guiss', 'JOUR J'))
         pv = self.client.get('/api/staff/billets-physiques/design?type=prevente', **STAFF).json()['design']
         self.assertEqual(pv['titre'], 'DIP + DJ DANY')
 
