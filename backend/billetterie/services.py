@@ -79,18 +79,29 @@ def vendre_guichet(ev, type_billet, nom='', telephone='', entree_immediate=True)
     return ticket
 
 
-@transaction.atomic
-def emettre_billets_physiques(ev):
-    """Émet les billets Jour J en papier : ils deviennent valides (une seule entrée chacun).
+# Billets papier par défaut : tous les Jour J, 100 Prévente
+PAPIER_PREVENTE_PAR_DEFAUT = 100
 
-    Idempotent : les billets déjà émis ou vendus sont conservés, seuls les disponibles sont émis.
-    Retourne tous les billets papier Jour J, par numéro.
+
+@transaction.atomic
+def emettre_billets_physiques(ev, type_billet=TypeBillet.JOUR_J, nombre=None):
+    """Émet des billets papier : ils deviennent valides (une seule entrée chacun).
+
+    - Jour J : tous les billets disponibles de la série.
+    - Prévente : jusqu'à `nombre` billets papier au total (100 par défaut), pris parmi les
+      derniers numéros (PV-400, PV-399…) pour ne pas croiser la vente en ligne qui part de PV-001.
+    Idempotent : les billets déjà émis ou vendus sont conservés.
+    Retourne tous les billets papier du type, par numéro.
     """
     maintenant = timezone.now()
-    Ticket.objects.filter(evenement=ev, type=TypeBillet.JOUR_J, statut=Ticket.Statut.DISPONIBLE).update(
-        statut=Ticket.Statut.VENDU, physique=True, acheteur_nom='Billet papier', date_achat=maintenant,
-    )
-    return list(Ticket.objects.filter(evenement=ev, type=TypeBillet.JOUR_J, physique=True).order_by('numero'))
+    disponibles = Ticket.objects.select_for_update().filter(evenement=ev, type=type_billet, statut=Ticket.Statut.DISPONIBLE)
+    if type_billet == TypeBillet.PREVENTE:
+        voulu = PAPIER_PREVENTE_PAR_DEFAUT if nombre is None else nombre
+        deja = Ticket.objects.filter(evenement=ev, type=type_billet, physique=True).count()
+        ids = list(disponibles.order_by('-numero').values_list('pk', flat=True)[:max(0, voulu - deja)])
+        disponibles = Ticket.objects.filter(pk__in=ids)
+    disponibles.update(statut=Ticket.Statut.VENDU, physique=True, acheteur_nom='Billet papier', date_achat=maintenant)
+    return list(Ticket.objects.filter(evenement=ev, type=type_billet, physique=True).order_by('numero'))
 
 
 @transaction.atomic

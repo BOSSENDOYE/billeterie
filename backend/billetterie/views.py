@@ -408,19 +408,9 @@ def staff_vente_guichet(request):
     return JsonResponse({'ticket': ser_ticket(ticket, qr=True), 'evenement': ser_evenement(ev, prive=True)}, status=201)
 
 
-@staff_requis
-@require_POST
-def staff_billets_physiques(request):
-    """Émet les 200 billets Jour J en papier et renvoie le PDF à imprimer (10 par page A4)."""
-    from .impression import generer_pdf
-
-    ev, err = evenement_ou_404()
-    if err:
-        return err
-    tickets = services.emettre_billets_physiques(ev)
-    if not tickets:
-        return erreur("Aucun billet Jour J disponible pour l'impression", 409)
-    return _pdf(generer_pdf(tickets, ev), 'billets-jour-j.pdf')
+def _type_papier(request):
+    type_billet = request.GET.get('type', TypeBillet.JOUR_J)
+    return type_billet if type_billet in TypeBillet.values else None
 
 
 def _pdf(contenu, nom):
@@ -431,25 +421,60 @@ def _pdf(contenu, nom):
 
 @staff_requis
 @require_POST
-def staff_apercu_papier(request):
-    """Aperçu du billet papier : une page (10 billets), sans rien émettre."""
+def staff_billets_physiques(request):
+    """Émet les billets papier d'un type (?type=jour_j|prevente, ?nombre= pour la prévente) et renvoie le PDF."""
     from .impression import generer_pdf
 
     ev, err = evenement_ou_404()
     if err:
         return err
-    tickets = list(ev.tickets.filter(type=TypeBillet.JOUR_J).order_by('numero')[:10])
-    return _pdf(generer_pdf(tickets, ev), 'apercu-billet-jour-j.pdf')
+    type_billet = _type_papier(request)
+    if type_billet is None:
+        return erreur('Type de billet invalide')
+    nombre = None
+    if type_billet == TypeBillet.PREVENTE and request.GET.get('nombre'):
+        try:
+            nombre = int(request.GET['nombre'])
+        except ValueError:
+            return erreur('Nombre invalide')
+        if not 1 <= nombre <= ev.quota_prevente:
+            return erreur(f'Nombre de billets papier prévente : entre 1 et {ev.quota_prevente}')
+    tickets = services.emettre_billets_physiques(ev, type_billet, nombre)
+    if not tickets:
+        return erreur("Aucun billet disponible pour l'impression", 409)
+    nom = 'billets-prevente.pdf' if type_billet == TypeBillet.PREVENTE else 'billets-jour-j.pdf'
+    return _pdf(generer_pdf(tickets, ev, type_billet), nom)
 
 
 @staff_requis
-def staff_design_papier(request):
-    """GET : design effectif + valeurs par défaut. POST {design} : enregistre (champ vide = défaut)."""
-    from .impression import CHAMPS_DESIGN, design_effectif, design_par_defaut
+@require_POST
+def staff_apercu_papier(request):
+    """Aperçu du billet papier d'un type : une page (10 billets), sans rien émettre."""
+    from .impression import generer_pdf
 
     ev, err = evenement_ou_404()
     if err:
         return err
+    type_billet = _type_papier(request)
+    if type_billet is None:
+        return erreur('Type de billet invalide')
+    serie = ev.tickets.filter(type=type_billet)
+    ordre = '-numero' if type_billet == TypeBillet.PREVENTE else 'numero'
+    tickets = list(serie.filter(physique=True).order_by('numero')[:10]) or list(serie.order_by(ordre)[:10])
+    return _pdf(generer_pdf(tickets, ev, type_billet), f'apercu-billet-{type_billet}.pdf')
+
+
+@staff_requis
+def staff_design_papier(request):
+    """GET : design effectif d'un type + valeurs par défaut. POST {design} : enregistre (champ vide = défaut)."""
+    from .impression import CHAMPS_DESIGN, TYPES_PAPIER, design_effectif, design_enregistre, design_par_defaut
+
+    ev, err = evenement_ou_404()
+    if err:
+        return err
+    type_billet = _type_papier(request)
+    if type_billet is None:
+        return erreur('Type de billet invalide')
     if request.method == 'POST':
         recu = corps(request).get('design') or {}
         design = {}
@@ -462,13 +487,16 @@ def staff_design_papier(request):
             if cle == 'couleur' and not re.fullmatch(r'#[0-9A-Fa-f]{6}', valeur):
                 return erreur('Couleur invalide (format #RRGGBB)')
             design[cle] = valeur
-        ev.design_papier = design
+        # Un design par type (l'ancien format à plat devient celui du Jour J)
+        tous = {t: design_enregistre(ev, t) for t in TYPES_PAPIER}
+        tous[type_billet] = design
+        ev.design_papier = tous
         ev.save(update_fields=['design_papier'])
     elif request.method != 'GET':
         return erreur('Méthode non autorisée', 405)
     return JsonResponse({
-        'design': design_effectif(ev),
-        'defaut': design_par_defaut(ev),
+        'design': design_effectif(ev, type_billet),
+        'defaut': design_par_defaut(ev, type_billet),
         'champs': {cle: {'libelle': l, 'max': m} for cle, (l, m) in CHAMPS_DESIGN.items()},
     })
 

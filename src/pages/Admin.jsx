@@ -142,7 +142,12 @@ export default function Admin() {
         {s.par_type && ['prevente', 'jour_j'].map((t) => <Serie key={t} type={t} serie={s.par_type[t]} />)}
       </div>
 
-      {s.par_type && <BilletsPapier evenement={ev} serie={s.par_type.jour_j} onChange={() => { stats.reload(); liste.reload() }} />}
+      {s.par_type && (
+        <>
+          <BilletsPapier type="prevente" evenement={ev} serie={s.par_type.prevente} onChange={() => { stats.reload(); liste.reload() }} />
+          <BilletsPapier type="jour_j" evenement={ev} serie={s.par_type.jour_j} onChange={() => { stats.reload(); liste.reload() }} />
+        </>
+      )}
 
       <VenteGuichet evenement={ev} stats={s} onVente={() => { stats.reload(); liste.reload() }} />
 

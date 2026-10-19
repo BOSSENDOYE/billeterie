@@ -90,10 +90,13 @@ export const api = {
   scans: () => request('staff/scans', { staff: true }),
   stats: () => request('staff/stats', { staff: true }),
   tickets: (statut, q, type = 'tous') => request(`staff/tickets?${new URLSearchParams({ statut, q, type })}`, { staff: true }),
-  billetsPapierPdf: () => telechargerFichier('staff/billets-physiques', 'billets-jour-j.pdf'),
-  apercuPapierPdf: () => telechargerFichier('staff/billets-physiques/apercu', 'apercu-billet-jour-j.pdf'),
-  designPapier: () => request('staff/billets-physiques/design', { staff: true }),
-  enregistrerDesignPapier: (design) => request('staff/billets-physiques/design', { method: 'POST', body: { design }, staff: true }),
+  // Billets papier : type = 'jour_j' ou 'prevente'
+  billetsPapierPdf: (type = 'jour_j') =>
+    telechargerFichier(`staff/billets-physiques?type=${type}`, type === 'prevente' ? 'billets-prevente.pdf' : 'billets-jour-j.pdf'),
+  apercuPapierPdf: (type = 'jour_j') => telechargerFichier(`staff/billets-physiques/apercu?type=${type}`, `apercu-billet-${type}.pdf`),
+  designPapier: (type = 'jour_j') => request(`staff/billets-physiques/design?type=${type}`, { staff: true }),
+  enregistrerDesignPapier: (type, design) =>
+    request(`staff/billets-physiques/design?type=${type}`, { method: 'POST', body: { design }, staff: true }),
   reinitialiserTestsJourJ: () => request('staff/billets-jour-j/reinitialiser-tests', { method: 'POST', body: {}, staff: true }),
   reinitialiserTicket: (id) => request(`staff/tickets/${id}/reinitialiser`, { method: 'POST', body: {}, staff: true }),
   venteGuichet: (vente) => request('staff/vente-guichet', { method: 'POST', body: vente, staff: true }),

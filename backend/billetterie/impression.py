@@ -1,4 +1,4 @@
-"""PDF des billets papier (série Jour J) : 10 billets par page A4, avec traits de coupe.
+"""PDF des billets papier (Jour J et Prévente) : 10 billets par page A4, avec traits de coupe.
 
 Fond blanc pour l'impression ; chaque QR est signé par le serveur et ne sert qu'une fois.
 """
@@ -52,23 +52,36 @@ CHAMPS_DESIGN = {
 }
 
 
-def design_par_defaut(ev):
+TYPES_PAPIER = ('jour_j', 'prevente')
+
+
+def design_par_defaut(ev, type_billet='jour_j'):
+    prevente = type_billet == 'prevente'
     return {
-        'bandeau': 'JOUR J',
-        'surtitre': 'BILLET  ·  JOUR J',
+        'bandeau': 'PRÉVENTE' if prevente else 'JOUR J',
+        'surtitre': 'BILLET  ·  PRÉVENTE' if prevente else 'BILLET  ·  JOUR J',
         'titre': ev.artiste.upper(),
         'date': _date(ev),
         'lieu': f'{ev.lieu} — {ev.ville}',
-        'prix': _prix(ev.prix_jour_j),
+        'prix': _prix(ev.prix if prevente else ev.prix_jour_j),
         'mention': 'Un billet = une entrée',
-        'couleur': '#C8102E',
+        # Or foncé pour la prévente (lisible imprimé sur blanc), rubis pour le Jour J
+        'couleur': '#A8862A' if prevente else '#C8102E',
     }
 
 
-def design_effectif(ev):
+def design_enregistre(ev, type_billet):
+    """Design personnalisé d'un type. Ancien format (dict à plat) = design Jour J."""
+    stocke = ev.design_papier or {}
+    if any(t in stocke for t in TYPES_PAPIER):
+        return stocke.get(type_billet) or {}
+    return stocke if type_billet == 'jour_j' else {}
+
+
+def design_effectif(ev, type_billet='jour_j'):
     """Valeurs par défaut, remplacées par celles enregistrées (champs non vides)."""
-    design = design_par_defaut(ev)
-    design.update({k: v for k, v in (ev.design_papier or {}).items() if k in CHAMPS_DESIGN and v})
+    design = design_par_defaut(ev, type_billet)
+    design.update({k: v for k, v in design_enregistre(ev, type_billet).items() if k in CHAMPS_DESIGN and v})
     return design
 
 
@@ -163,12 +176,13 @@ def _billet(c, ticket, ev, x, y, design):
     c.drawString(gx, y + 4.3 * mm, design['mention'])
 
 
-def generer_pdf(tickets, ev):
-    """Retourne le PDF (bytes) des billets donnés, dans l'ordre."""
+def generer_pdf(tickets, ev, type_billet=None):
+    """Retourne le PDF (bytes) des billets donnés (d'un même type), dans l'ordre."""
+    type_billet = type_billet or (tickets[0].type if tickets else 'jour_j')
     tampon = BytesIO()
     c = canvas.Canvas(tampon, pagesize=A4)
-    design = design_effectif(ev)
-    c.setTitle(f'Billets Jour J — {ev.artiste}')
+    design = design_effectif(ev, type_billet)
+    c.setTitle(f"Billets {'Prévente' if type_billet == 'prevente' else 'Jour J'} — {ev.artiste}")
     c.setAuthor('Guichet Billetterie')
     par_page = COLONNES * LIGNES
     for i, ticket in enumerate(tickets):

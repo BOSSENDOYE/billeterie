@@ -7,21 +7,21 @@ import { btn, input, Spinner } from './ui'
 const ORDRE = ['bandeau', 'surtitre', 'titre', 'date', 'lieu', 'prix', 'mention']
 
 /** Éditeur des textes et de la couleur du billet papier (les QR codes ne changent pas). */
-function EditeurDesign() {
+function EditeurDesign({ type }) {
   const [infos, setInfos] = useState(null)
   const [design, setDesign] = useState({})
   const [etat, setEtat] = useState('')
   const [erreur, setErreur] = useState('')
 
   useEffect(() => {
-    api.designPapier().then(
+    api.designPapier(type).then(
       (d) => {
         setInfos(d)
         setDesign(d.design)
       },
       (e) => setErreur(e.message),
     )
-  }, [])
+  }, [type])
 
   if (!infos) return erreur ? <p className="mt-4 text-sm text-red-400">{erreur}</p> : <Spinner className="mt-4 h-5 w-5" />
 
@@ -36,7 +36,7 @@ function EditeurDesign() {
     try {
       // Une valeur identique au défaut n'est pas enregistrée : elle suivra l'événement (date, prix…)
       const aEnregistrer = Object.fromEntries(Object.entries(valeurs).filter(([k, v]) => v && v !== infos.defaut[k]))
-      const d = await api.enregistrerDesignPapier(aEnregistrer)
+      const d = await api.enregistrerDesignPapier(type, aEnregistrer)
       setInfos(d)
       setDesign(d.design)
       setEtat('enregistre')
@@ -51,7 +51,7 @@ function EditeurDesign() {
   async function apercu() {
     if (!(await enregistrer())) return
     try {
-      await api.apercuPapierPdf()
+      await api.apercuPapierPdf(type)
     } catch (e) {
       setErreur(e.message)
     }
@@ -102,14 +102,26 @@ function EditeurDesign() {
   )
 }
 
-/** Billets Jour J vendus en papier : impression, remise à zéro des tests, design. */
-export default function BilletsPapier({ evenement: ev, serie, onChange }) {
+// Textes et réglages propres à chaque série de billets papier
+const SERIES = {
+  jour_j: { titre: 'Billets Jour J à imprimer', nom: 'Jour J', cadre: 'border-ruby/40', bouton: 'border-ruby/60 text-ruby-light', accent: 'text-ruby-light' },
+  prevente: { titre: 'Billets Prévente à imprimer', nom: 'Prévente', cadre: 'border-gold/40', bouton: 'border-gold/60 text-gold-light', accent: 'text-gold-light' },
+}
+const PAPIER_PREVENTE = 100
+
+/** Billets vendus en papier (Jour J ou Prévente) : impression, remise à zéro des tests (Jour J), design. */
+export default function BilletsPapier({ evenement: ev, serie, onChange, type = 'jour_j' }) {
+  const conf = SERIES[type]
+  const jourJ = type === 'jour_j'
+  const prix = jourJ ? ev.prix_jour_j : ev.prix_prevente
+  const nombre = jourJ ? ev.quota_jour_j : PAPIER_PREVENTE
   const [envoi, setEnvoi] = useState('')
   const [erreur, setErreur] = useState('')
   const [info, setInfo] = useState('')
   const [editeur, setEditeur] = useState(false)
   const dejaImprimes = serie.physiques > 0
-  const aRemettre = (serie.hors_papier ?? 0) + (serie.physiques_entres ?? 0)
+  // Remise à zéro des tests : Jour J uniquement (en prévente, les billets hors papier sont de vraies ventes en ligne)
+  const aRemettre = jourJ ? (serie.hors_papier ?? 0) + (serie.physiques_entres ?? 0) : 0
 
   async function action(nom, fn) {
     setEnvoi(nom)
@@ -127,9 +139,11 @@ export default function BilletsPapier({ evenement: ev, serie, onChange }) {
 
   function telecharger() {
     const message = dejaImprimes
-      ? 'Télécharger le PDF des billets Jour J ? (mêmes billets, mêmes QR codes)'
-      : `Émettre les ${ev.quota_jour_j} billets Jour J en papier ?\n\nIls deviennent valides tout de suite : gardez-les en lieu sûr jusqu'à leur vente.`
-    if (confirm(message)) action('pdf', api.billetsPapierPdf)
+      ? `Télécharger le PDF des billets ${conf.nom} ? (mêmes billets, mêmes QR codes)`
+      : `Émettre ${nombre} billets ${conf.nom} en papier ?` +
+        (jourJ ? '' : `\n\nIls sont pris sur les places de prévente (numéros PV-${String(ev.quota_prevente - nombre + 1).padStart(3, '0')} à PV-${ev.quota_prevente}) et ne seront plus vendus en ligne.`) +
+        "\n\nIls deviennent valides tout de suite : gardez-les en lieu sûr jusqu'à leur vente."
+    if (confirm(message)) action('pdf', () => api.billetsPapierPdf(type))
   }
 
   function remettreAZero() {
@@ -145,20 +159,20 @@ export default function BilletsPapier({ evenement: ev, serie, onChange }) {
   }
 
   return (
-    <section className="mt-6 rounded-2xl border border-ruby/40 bg-surface p-5">
+    <section className={`mt-6 rounded-2xl border bg-surface p-5 ${conf.cadre}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-xl">
-          <h2 className="font-semibold">Billets Jour J à imprimer</h2>
+          <h2 className="font-semibold">{conf.titre}</h2>
           <p className="mt-1 text-sm text-muted">
-            PDF de {ev.quota_jour_j} billets ({formatPrix(ev.prix_jour_j)}), 10 par page A4 avec traits de coupe. Chaque QR code ne
-            permet qu'une seule entrée.
+            PDF de {nombre} billets ({formatPrix(prix)}), 10 par page A4 avec traits de coupe. Chaque QR code ne permet qu'une seule
+            entrée.{!jourJ && ' Les billets Prévente vendus en ligne ne changent pas.'}
           </p>
           <p className="mt-2 text-sm">
-            <span className="text-ruby-light">
-              {serie.physiques ?? 0} / {ev.quota_jour_j} imprimés
+            <span className={conf.accent}>
+              {serie.physiques ?? 0} / {nombre} imprimés
             </span>
             <span className="text-muted"> · {serie.physiques_entres ?? 0} entrés</span>
-            {serie.hors_papier > 0 && <span className="text-amber-300"> · {serie.hors_papier} vendu(s) hors papier</span>}
+            {jourJ && serie.hors_papier > 0 && <span className="text-amber-300"> · {serie.hors_papier} vendu(s) hors papier</span>}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -168,7 +182,7 @@ export default function BilletsPapier({ evenement: ev, serie, onChange }) {
               Remettre à zéro les tests ({aRemettre})
             </button>
           )}
-          <button onClick={telecharger} disabled={!!envoi} className={`${btn.ghost} border-ruby/60 py-2.5 text-sm text-ruby-light`}>
+          <button onClick={telecharger} disabled={!!envoi} className={`${btn.ghost} py-2.5 text-sm ${conf.bouton}`}>
             {envoi === 'pdf' ? <Spinner className="h-4 w-4" /> : <IconDownload className="h-4 w-4" />}
             {dejaImprimes ? 'Télécharger le PDF' : 'Télécharger les billets (PDF)'}
           </button>
@@ -177,7 +191,7 @@ export default function BilletsPapier({ evenement: ev, serie, onChange }) {
           </button>
         </div>
       </div>
-      {serie.hors_papier > 0 && (
+      {jourJ && serie.hors_papier > 0 && (
         <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
           {serie.hors_papier} billet(s) Jour J ont été vendus hors papier (tests au guichet ?) : ils ne sont pas dans le PDF. « Remettre à
           zéro les tests » les rend de nouveau imprimables.
@@ -185,7 +199,7 @@ export default function BilletsPapier({ evenement: ev, serie, onChange }) {
       )}
       {info && <p className="mt-3 text-sm text-emerald-300">{info}</p>}
       {erreur && <p className="mt-3 text-sm text-red-400">{erreur}</p>}
-      {editeur && <EditeurDesign />}
+      {editeur && <EditeurDesign type={type} />}
     </section>
   )
 }

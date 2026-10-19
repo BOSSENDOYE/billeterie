@@ -19,6 +19,7 @@ PROJET = Path(__file__).resolve().parent.parent
 URL = 'https://billeteriecjics.com'
 SITE = 'billeteriecjics.com'
 ORGANISATEUR = 'CJICS'
+INVITE = 'DJ DANY'  # artiste invité, affiché « avec DJ DANY » sous le nom
 INFOLINE = ['+221 71 161 95 47', '+221 77 370 91 07', '+221 78 602 95 98']
 
 DPI = 300
@@ -96,6 +97,20 @@ def texte(d, x, y, contenu, police, couleur, lettrage=0, ancre='gauche'):
         d.text((x, y), c, font=police, fill=couleur)
         x += lw + lettrage
     return total
+
+
+def ligne_invite(d, x, y, taille, ancre='gauche'):
+    """« AVEC DJ DANY » : « avec » discret, nom de l'invité en or. Retourne le bas de la ligne."""
+    f_avec, f_nom = bahn(taille * 0.55, 'SemiBold'), bahn(taille, 'Bold')
+    lettrage = taille * 0.12
+    l_avec = sum(d.textlength(c, font=f_avec) for c in 'AVEC') + lettrage * 3
+    l_nom = d.textlength(INVITE, font=f_nom)
+    ecart = taille * 0.45
+    total = l_avec + ecart + l_nom
+    x0 = x - total / 2 if ancre == 'centre' else x
+    texte(d, x0, y + taille * 0.36, 'AVEC', f_avec, GRIS, lettrage=lettrage)
+    d.text((x0 + l_avec + ecart, y), INVITE, font=f_nom, fill=OR_CLAIR)
+    return y + taille * 1.15
 
 
 def icone_tel(d, x, y, t, couleur):
@@ -182,11 +197,12 @@ def generer(nom, largeur_mm, hauteur_mm, source):
     # --- Nom de l'artiste, en grand, en bas à gauche
     largeur_nom = qx - 4 * u - marge
     titre = taille_ajustee('DIP DOUNDOU GUISS', serif, 16 * u, largeur_nom)
-    _, haut_nom, _, bas_nom = texte_or(affiche, marge, 61 * u, 'DIP DOUNDOU GUISS', titre, ombre=30)
+    _, haut_nom, _, bas_nom = texte_or(affiche, marge, 55.5 * u, 'DIP DOUNDOU GUISS', titre, ombre=30)
     d = ImageDraw.Draw(affiche)
+    bas_invite = ligne_invite(d, marge + 0.4 * u, bas_nom + 2.2 * u, 4.4 * u)
 
     # --- Tarifs, sous le nom
-    yt = bas_nom + 3.4 * u
+    yt = bas_invite + 2.6 * u
     x = marge
     for etiquette, couleur, prix in (('PRÉVENTE', OR, '2 500 FCFA'), ('JOUR J', RUBIS, '3 000 FCFA')):
         f_etiq, f_prix = bahn(2.4 * u, 'Bold'), bahn(5 * u, 'Bold')
@@ -247,10 +263,11 @@ def generer_flyer(nom, largeur_mm, hauteur_mm, source):
 
     # Nom, date, lieu
     largeur_utile = W - 2 * marge
-    texte(d, cx, 47 * u, 'EN CONCERT LIVE', bahn(2.2 * u, 'Bold'), OR, lettrage=0.6 * u, ancre='centre')
-    _, _, _, y = texte_or(affiche, cx, 50.5 * u, 'DIP DOUNDOU', taille_ajustee('DIP DOUNDOU', serif, 8 * u, largeur_utile), ancre='centre', ombre=16)
+    texte(d, cx, 40.5 * u, 'EN CONCERT LIVE', bahn(2.2 * u, 'Bold'), OR, lettrage=0.6 * u, ancre='centre')
+    _, _, _, y = texte_or(affiche, cx, 44 * u, 'DIP DOUNDOU', taille_ajustee('DIP DOUNDOU', serif, 8 * u, largeur_utile), ancre='centre', ombre=16)
     _, _, _, y = texte_or(affiche, cx, y + 1 * u, 'GUISS', serif(9.5 * u), ancre='centre', ombre=16)
     d = ImageDraw.Draw(affiche)
+    y = ligne_invite(d, cx, y + 1.6 * u, 3.3 * u, ancre='centre') - 0.4 * u
     date = 'SAMEDI 26 DÉCEMBRE 2026  ·  19H'
     texte(d, cx, y + 2.6 * u, date, taille_ajustee(date, lambda t: bahn(t, 'Bold'), 3 * u, largeur_utile), CREME, ancre='centre')
     lieu = 'Terrain de tennis de la Cité Mbaye Mbaye  ·  MBORO'
@@ -258,7 +275,7 @@ def generer_flyer(nom, largeur_mm, hauteur_mm, source):
 
     # Tarifs (gauche) + QR (droite)
     haut_bloc = y + 10 * u
-    cote = int(13 * u)
+    cote = int(12.4 * u)
     qx, qy = W - marge - cote, int(haut_bloc)
     d.rounded_rectangle([qx - 0.8 * u, qy - 0.8 * u, qx + cote + 0.8 * u, qy + cote + 0.8 * u], radius=int(0.9 * u), fill='white', outline=OR, width=max(3, int(0.25 * u)))
     q = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H, border=2, box_size=24)
@@ -272,7 +289,7 @@ def generer_flyer(nom, largeur_mm, hauteur_mm, source):
     for etiquette, couleur, prix, couleur_prix in (('PRÉVENTE', OR, '2 500 FCFA', OR_CLAIR), ('JOUR J', RUBIS, '3 000 FCFA', CREME)):
         texte(d, marge, yt, etiquette, bahn(1.9 * u, 'Bold'), couleur, lettrage=0.25 * u)
         d.text((marge, yt + 2.2 * u), prix, font=bahn(4.1 * u, 'Bold'), fill=couleur_prix)
-        yt += 6.8 * u
+        yt += 6.4 * u
     texte(d, marge, yt - 0.4 * u, SITE, bahn(1.9 * u, 'SemiBold'), GRIS)
 
     # Infoline

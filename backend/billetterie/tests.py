@@ -272,3 +272,49 @@ class ParcoursTest(TestCase):
         self.assertTrue(r.content.startswith(b'%PDF'))
         self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 1)
         self.assertFalse(Ticket.objects.filter(physique=True).exists())
+
+    # --- Billets papier Prévente --------------------------------------------
+
+    def imprimer_prevente(self, nombre=None):
+        url = '/api/staff/billets-physiques?type=prevente' + (f'&nombre={nombre}' if nombre else '')
+        r = self.client.post(url, **STAFF)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b'%PDF'))
+        return r
+
+    def test_cent_billets_prevente_papier(self):
+        r = self.imprimer_prevente()
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 10)  # 100 billets, 10 par page
+        papier = Ticket.objects.filter(type='prevente', physique=True)
+        self.assertEqual(papier.count(), 100)
+        self.assertEqual(sorted(papier.values_list('numero', flat=True))[:2], [301, 302])
+        self.assertFalse(Ticket.objects.filter(type='jour_j', physique=True).exists())
+        # Réimpression : toujours les mêmes 100 billets
+        self.imprimer_prevente()
+        self.assertEqual(Ticket.objects.filter(type='prevente', physique=True).count(), 100)
+
+    def test_vente_en_ligne_continue_apres_impression_prevente(self):
+        self.imprimer_prevente()
+        ticket = self.client.get(f'/api/tickets/{self.acheter()}').json()['ticket']
+        self.assertEqual((ticket['code'], ticket['physique']), ('PV-001', False))
+        pv = self.client.get('/api/staff/stats', **STAFF).json()['stats']['par_type']['prevente']
+        self.assertEqual((pv['physiques'], pv['restants']), (100, 299))
+
+    def test_billet_papier_prevente_scanne(self):
+        self.imprimer_prevente()
+        t = Ticket.objects.get(type='prevente', numero=350)
+        r = self.post('/api/staff/scan', {'qr': t.qr_payload}, **STAFF).json()
+        self.assertEqual((r['resultat'], r['ticket']['code'], r['ticket']['type']), ('valide', 'PV-350', 'prevente'))
+
+    def test_design_separe_par_type(self):
+        d = self.client.get('/api/staff/billets-physiques/design?type=prevente', **STAFF).json()['design']
+        self.assertEqual((d['bandeau'], d['prix']), ('PRÉVENTE', '2 500 FCFA'))
+        self.post('/api/staff/billets-physiques/design?type=prevente', {'design': {'titre': 'DIP + DJ DANY'}}, **STAFF)
+        jj = self.client.get('/api/staff/billets-physiques/design?type=jour_j', **STAFF).json()['design']
+        self.assertEqual((jj['titre'], jj['bandeau']), ('DIP DOUNDOU GUISS', 'JOUR J'))
+        pv = self.client.get('/api/staff/billets-physiques/design?type=prevente', **STAFF).json()['design']
+        self.assertEqual(pv['titre'], 'DIP + DJ DANY')
+
+    def test_nombre_papier_prevente_borne(self):
+        r = self.client.post('/api/staff/billets-physiques?type=prevente&nombre=900', **STAFF)
+        self.assertEqual(r.status_code, 400)
