@@ -1,7 +1,8 @@
-"""PDF des billets papier (Jour J et Prévente) : 10 billets par page A4, avec repères de coupe.
+"""PDF des billets papier : 10 billets par page A4.
 
-Même apparence que le billet de la plateforme : fond sombre, photo de l'artiste, nom en dégradé,
-bloc date, souche avec bandeau et QR code — rubis pour le Jour J, or pour la Prévente.
+Deux formats bien distincts :
+- Jour J   : comme le billet de la plateforme (fond sombre, photo de l'artiste, rubis, souche QR).
+- Prévente : format blanc, grande bande verticale dorée « PRÉVENTE », texte noir.
 Chaque QR est signé par le serveur et ne sert qu'une fois.
 """
 from functools import lru_cache
@@ -25,6 +26,7 @@ SURFACE = HexColor('#121214')
 CREME = HexColor('#F4F1EA')
 MUET = HexColor('#9A9AA3')
 REPERE = Color(0.55, 0.55, 0.55)
+COUPE = Color(0.6, 0.6, 0.6)
 PALETTES = {
     'prevente': {'clair': '#F0D78C', 'base': '#D4AF37', 'fonce': '#8C6D1F', 'texte_bandeau': '#0A0A0B'},
     'jour_j': {'clair': '#FF8B94', 'base': '#E0314B', 'fonce': '#7A0F1F', 'texte_bandeau': '#FFFFFF'},
@@ -40,7 +42,24 @@ SOUCHE = 30 * mm
 QR = 21 * mm
 DPI_PHOTO = 300
 
+# Format Prévente (blanc) : billets jointifs de 95 x 54 mm, traits de coupe en pointillés
+L_CLASSIQUE, H_CLASSIQUE = 95 * mm, 54 * mm
+BANDE = 9 * mm
+QR_CLASSIQUE = 27 * mm
+NOIR = HexColor('#111111')
+GRIS = HexColor('#666666')
+OR_IMPRESSION = '#A8862A'  # or foncé, lisible imprimé sur blanc
+
+MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août',
+        'septembre', 'octobre', 'novembre', 'décembre']
+JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+
 MOIS_COURTS = ['JANV', 'FÉVR', 'MARS', 'AVR', 'MAI', 'JUIN', 'JUIL', 'AOÛT', 'SEPT', 'OCT', 'NOV', 'DÉC']
+
+
+def _date(ev):
+    d = timezone.localtime(ev.date)
+    return f"{JOURS[d.weekday()]} {d.day} {MOIS[d.month - 1]} {d.year} · {d.hour}h{d.minute:02d}".replace('h00', 'h')
 
 
 def _prix(montant):
@@ -67,12 +86,12 @@ def design_par_defaut(ev, type_billet='jour_j'):
     prevente = type_billet == 'prevente'
     return {
         'bandeau': 'PRÉVENTE' if prevente else 'JOUR J',
-        'surtitre': 'E-BILLET  ·  PRÉVENTE' if prevente else 'E-BILLET  ·  JOUR J',
+        'surtitre': 'BILLET  ·  PRÉVENTE' if prevente else 'E-BILLET  ·  JOUR J',
         'titre': ev.artiste,
         'lieu': f'{ev.lieu} — {ev.ville}',
         'prix': _prix(ev.prix if prevente else ev.prix_jour_j),
         'mention': 'Un billet = une entrée',
-        'couleur': PALETTES[type_billet]['base'],
+        'couleur': OR_IMPRESSION if prevente else PALETTES[type_billet]['base'],
     }
 
 
@@ -287,6 +306,73 @@ def _billet(c, ticket, ev, x, y, design, type_billet):
         c.circle(sx, cy, 2.2 * mm, stroke=1, fill=0)
 
 
+def _billet_classique(c, ticket, ev, x, y, design):
+    """Format Prévente : fond blanc, bande verticale de couleur, texte noir, souche QR."""
+    accent = HexColor(design['couleur'])
+    # Traits de coupe (pointillés gris)
+    c.setStrokeColor(COUPE)
+    c.setDash(2, 2)
+    c.setLineWidth(0.4)
+    c.rect(x, y, L_CLASSIQUE, H_CLASSIQUE)
+    c.setDash()
+
+    # Bande verticale « PRÉVENTE »
+    c.setFillColor(accent)
+    c.rect(x, y, BANDE, H_CLASSIQUE, stroke=0, fill=1)
+    c.saveState()
+    c.translate(x + BANDE / 2 + 2.2 * mm, y + H_CLASSIQUE / 2)
+    c.rotate(90)
+    c.setFillColor(white)
+    c.setFont('Helvetica-Bold', 12)
+    c.drawCentredString(0, 0, ' '.join(design['bandeau'].upper()))
+    c.restoreState()
+
+    # Souche : QR + numéro, séparée par un pointillé
+    souche_x = x + L_CLASSIQUE - QR_CLASSIQUE - 6 * mm
+    c.setStrokeColor(accent)
+    c.setDash(1.5, 2)
+    c.line(souche_x - 2 * mm, y + 4 * mm, souche_x - 2 * mm, y + H_CLASSIQUE - 4 * mm)
+    c.setDash()
+    _qr(c, ticket.qr_payload, souche_x + 2 * mm, y + 14 * mm, QR_CLASSIQUE)
+    c.setFillColor(NOIR)
+    c.setFont('Helvetica', 6.5)
+    c.drawCentredString(souche_x + 2 * mm + QR_CLASSIQUE / 2, y + 9.5 * mm, 'BILLET N°')
+    c.setFont('Helvetica-Bold', 12)
+    c.setFillColor(accent)
+    c.drawCentredString(souche_x + 2 * mm + QR_CLASSIQUE / 2, y + 4.5 * mm, ticket.code)
+
+    # Partie principale
+    gx = x + BANDE + 4 * mm
+    largeur = souche_x - 4 * mm - gx
+    haut = y + H_CLASSIQUE - 7 * mm
+    c.setFillColor(accent)
+    c.setFont('Helvetica-Bold', 6.5)
+    c.drawString(gx, haut, design['surtitre'].upper())
+
+    c.setFillColor(NOIR)
+    c.setFont('Helvetica-Bold', 14)
+    ty = haut - 7 * mm
+    for ligne in simpleSplit(design['titre'].upper(), 'Helvetica-Bold', 14, largeur)[:2]:
+        c.drawString(gx, ty, ligne)
+        ty -= 5.2 * mm
+
+    c.setFont('Helvetica-Bold', 8)
+    c.drawString(gx, ty, _date(ev))
+    ty -= 4 * mm
+    c.setFillColor(GRIS)
+    c.setFont('Helvetica', 7)
+    for ligne in simpleSplit(design['lieu'], 'Helvetica', 7, largeur)[:2]:
+        c.drawString(gx, ty, ligne)
+        ty -= 3.3 * mm
+
+    c.setFillColor(accent)
+    c.setFont('Helvetica-Bold', 13)
+    c.drawString(gx, y + 8 * mm, design['prix'])
+    c.setFillColor(GRIS)
+    c.setFont('Helvetica', 6)
+    c.drawString(gx, y + 4.3 * mm, design['mention'])
+
+
 def generer_pdf(tickets, ev, type_billet=None):
     """Retourne le PDF (bytes) des billets donnés (d'un même type), dans l'ordre."""
     type_billet = type_billet or (tickets[0].type if tickets else 'jour_j')
@@ -295,14 +381,22 @@ def generer_pdf(tickets, ev, type_billet=None):
     design = design_effectif(ev, type_billet)
     c.setTitle(f"Billets {'Prévente' if type_billet == 'prevente' else 'Jour J'} — {ev.artiste}")
     c.setAuthor('Guichet Billetterie')
+    if type_billet == 'prevente':
+        # Format blanc : billets jointifs
+        largeur, hauteur, espace, dessiner = L_CLASSIQUE, H_CLASSIQUE, 0, (
+            lambda t, x, y: _billet_classique(c, t, ev, x, y, design))
+    else:
+        # Format plateforme : billets séparés de 3 mm
+        largeur, hauteur, espace, dessiner = L_BILLET, H_BILLET, ESPACE, (
+            lambda t, x, y: _billet(c, t, ev, x, y, design, type_billet))
+    marge_x = (A4[0] - COLONNES * largeur - (COLONNES - 1) * espace) / 2
+    marge_y = (A4[1] - LIGNES * hauteur - (LIGNES - 1) * espace) / 2
     par_page = COLONNES * LIGNES
     for i, ticket in enumerate(tickets):
         if i and i % par_page == 0:
             c.showPage()
         rang = i % par_page
         col, lig = rang % COLONNES, rang // COLONNES
-        x = MARGE_X + col * (L_BILLET + ESPACE)
-        y = A4[1] - MARGE_Y - (lig + 1) * H_BILLET - lig * ESPACE
-        _billet(c, ticket, ev, x, y, design, type_billet)
+        dessiner(ticket, marge_x + col * (largeur + espace), A4[1] - marge_y - (lig + 1) * hauteur - lig * espace)
     c.save()
     return tampon.getvalue()
