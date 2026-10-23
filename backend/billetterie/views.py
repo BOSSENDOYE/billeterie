@@ -6,6 +6,7 @@ from functools import wraps
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponse
 from django.http import JsonResponse
@@ -14,7 +15,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from . import services
+from . import services, wave
 from .models import Paiement, Scan, Ticket, TypeBillet
 
 TEL_RE = re.compile(r'^7[05678]\d{7}$')
@@ -106,7 +107,9 @@ def ser_paiement(p):
         'declare_le': p.declare_le.isoformat() if p.declare_le else None,
         'cree_le': p.cree_le.isoformat(),
         'ticket_id': str(p.ticket_id) if p.ticket_id else None,
-        'wave_url': wave_url(p.montant),
+        'wave_url': p.wave_lien or wave_url(p.montant),
+        # Paiement Wave Checkout : billet émis automatiquement, sans « J'ai payé » ni vérification
+        'automatique': bool(p.wave_session),
         'simule': settings.PAIEMENT_SIMULE,
     }
 
@@ -184,8 +187,10 @@ def evenement(request):
         # En ligne : prévente uniquement. Les billets Jour J sont vendus en papier, sur place.
         'vente_en_ligne': tarif['type'] == TypeBillet.PREVENTE,
         'paiement_simule': settings.PAIEMENT_SIMULE,
-        # Lien marchand avec le montant pré-rempli : le bouton l'ouvre directement
-        'wave_url': wave_url(tarif['prix']),
+        'paiement_automatique': wave.actif(),
+        # Lien marchand avec le montant pré-rempli : le bouton l'ouvre directement.
+        # Avec Wave Checkout, le lien est propre à chaque commande (créé avec le paiement).
+        'wave_url': None if wave.actif() else wave_url(tarif['prix']),
     })
 
 
@@ -212,13 +217,44 @@ def creer_paiement(request):
 
     tel_fmt = f'{tel[:2]} {tel[2:5]} {tel[5:7]} {tel[7:]}'
     p = Paiement.objects.create(evenement=ev, nom=nom, telephone=tel_fmt, type=tarif['type'], montant=tarif['prix'])
+    if wave.actif():
+        url_retour = f"{settings.SITE_URL or request.build_absolute_uri('/').rstrip('/')}/paiement/{p.reference}"
+        try:
+            session = wave.creer_session(p, url_retour)
+        except wave.WaveErreur:
+            p.delete()
+            return erreur('Wave est momentanément indisponible, réessayez dans un instant', 502)
+        p.wave_session = session['id']
+        p.wave_lien = session['wave_launch_url']
+        p.save(update_fields=['wave_session', 'wave_lien', 'maj_le'])
     return JsonResponse({'paiement': ser_paiement(p), 'evenement': ser_evenement(ev)}, status=201)
 
 
 @require_GET
 def detail_paiement(request, reference):
     p = get_object_or_404(Paiement.objects.select_related('evenement'), reference=reference)
+    # Filet de sécurité si le webhook tarde : la page de paiement relit la session Wave
+    # (au plus une fois toutes les 8 s par paiement)
+    en_cours = p.statut in (Paiement.Statut.EN_ATTENTE, Paiement.Statut.A_VERIFIER)
+    if p.wave_session and settings.WAVE_API_KEY and en_cours and cache.add(f'wave-sync-{p.pk}', 1, 8):
+        try:
+            p = services.appliquer_session_wave(wave.lire_session(p.wave_session)) or p
+        except wave.WaveErreur:
+            pass
     return JsonResponse({'paiement': ser_paiement(p), 'evenement': ser_evenement(p.evenement)})
+
+
+@csrf_exempt
+@require_POST
+def wave_webhook(request):
+    """Notification signée de Wave (checkout.session.completed / expired) : émet le billet."""
+    if not wave.signature_valide(request.headers.get('Wave-Signature', ''), request.body):
+        return erreur('Signature invalide', 401)
+    evenement = corps(request)
+    if str(evenement.get('type', '')).startswith('checkout.session.') and isinstance(evenement.get('data'), dict):
+        services.appliquer_session_wave(evenement['data'])
+    # Toujours 200 une fois la signature vérifiée : le traitement est idempotent
+    return JsonResponse({'ok': True})
 
 
 @csrf_exempt
@@ -232,6 +268,8 @@ def declarer_paiement(request, reference):
     p = get_object_or_404(Paiement, reference=reference)
     if p.statut not in (Paiement.Statut.EN_ATTENTE, Paiement.Statut.A_VERIFIER):
         return erreur('Ce paiement a déjà été traité', 409)
+    if p.wave_session:
+        return erreur('Ce paiement est confirmé automatiquement par Wave', 409)
 
     transaction = str(corps(request).get('transaction', '')).strip() or None
     if transaction:
@@ -371,7 +409,8 @@ def staff_valider_paiement(request, reference):
     p = services.confirmer_paiement(p)
     if p.statut != Paiement.Statut.REUSSI:
         return erreur('Plus aucun billet disponible', 409)
-    return JsonResponse({'paiement': ser_paiement(p)})
+    # Code du billet : repris dans le message WhatsApp envoyé à l'acheteur
+    return JsonResponse({'paiement': {**ser_paiement(p), 'code': p.ticket.code}})
 
 
 @staff_requis

@@ -33,6 +33,14 @@ STAFF_ACCESS_CODE = os.getenv('STAFF_ACCESS_CODE', 'or2026')
 # À mettre à 0 pour les vraies ventes.
 PAIEMENT_SIMULE = os.getenv('PAIEMENT_SIMULE', '0') == '1'
 WAVE_MERCHANT_URL = os.getenv('WAVE_MERCHANT_URL', 'https://pay.wave.com/m/M_sn_mv6AS9iOxirH/c/sn/')
+# API Wave Checkout (Wave Business > Développeurs). Si la clé est renseignée, chaque paiement
+# ouvre une session Wave et le billet est émis automatiquement dès que Wave confirme ;
+# sinon, lien marchand ci-dessus + vérification manuelle dans le tableau de bord.
+WAVE_API_KEY = os.getenv('WAVE_API_KEY', '')
+# Secret du webhook Wave (URL à déclarer : https://<domaine>/api/wave/webhook)
+WAVE_WEBHOOK_SECRET = os.getenv('WAVE_WEBHOOK_SECRET', '')
+# Adresse publique du site, pour le retour depuis Wave (ex. https://billeteriecjics.com)
+SITE_URL = os.getenv('SITE_URL', '').rstrip('/')
 
 INSTALLED_APPS = [
     'django.contrib.admin',

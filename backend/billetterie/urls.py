@@ -9,6 +9,7 @@ urlpatterns = [
     path('paiements/<str:reference>/declarer', views.declarer_paiement),
     path('paiements/<str:reference>/simuler', views.simuler_paiement),
     path('tickets/<uuid:ticket_id>', views.detail_ticket),
+    path('wave/webhook', views.wave_webhook),
     path('staff/login', views.staff_login),
     path('staff/scan', views.staff_scan),
     path('staff/scans', views.staff_scans),

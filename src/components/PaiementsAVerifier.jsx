@@ -4,6 +4,15 @@ import { dateCourte, formatPrix } from '../lib/format'
 import { IconCheck, IconX } from './Icons'
 import { Spinner } from './ui'
 
+/** Lien WhatsApp vers l'acheteur, message pré-rempli avec le lien de son billet. */
+function lienWhatsApp(p) {
+  const message =
+    `Bonjour ${p.nom}, votre paiement Wave de ${formatPrix(p.montant)} est confirmé ✅\n` +
+    `Votre billet ${p.code} : ${window.location.origin}/billet/${p.ticket_id}\n` +
+    `Présentez son QR code à l'entrée.`
+  return `https://wa.me/221${p.telephone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
+}
+
 /**
  * Paiements déclarés par les acheteurs (numéro Wave, montant), à rapprocher
  * de l'historique Wave Business avant d'émettre le billet.
@@ -12,13 +21,20 @@ export default function PaiementsAVerifier({ onChange }) {
   const { data, reload } = usePolling(() => api.paiements('a_verifier'), [], 5000)
   const [enCours, setEnCours] = useState(null)
   const [erreur, setErreur] = useState('')
+  // Paiements confirmés dans cette session : billet à envoyer à l'acheteur sur WhatsApp
+  const [confirmes, setConfirmes] = useState([])
 
   async function traiter(p, action) {
     if (action === 'rejeter' && !confirm(`Rejeter le paiement de ${p.nom} (+221 ${p.telephone}) ? Aucun billet ne sera émis.`)) return
     setEnCours(p.reference)
     setErreur('')
     try {
-      await (action === 'valider' ? api.validerPaiement(p.reference) : api.rejeterPaiement(p.reference))
+      if (action === 'valider') {
+        const { paiement } = await api.validerPaiement(p.reference)
+        setConfirmes((liste) => [{ ...paiement, envoye: false }, ...liste.filter((c) => c.reference !== paiement.reference)])
+      } else {
+        await api.rejeterPaiement(p.reference)
+      }
       await reload()
       onChange?.()
     } catch (e) {
@@ -41,6 +57,33 @@ export default function PaiementsAVerifier({ onChange }) {
         </div>
         <p className="text-xs text-muted">Retrouvez chaque paiement (numéro, montant) dans votre app Wave Business avant de confirmer.</p>
       </div>
+
+      {confirmes.length > 0 && (
+        <ul className="divide-y divide-line/70 border-b border-line bg-emerald-500/5">
+          {confirmes.map((c) => (
+            <li key={c.reference} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <p className="text-sm">
+                <IconCheck className="mr-1.5 inline h-4 w-4 text-emerald-400" />
+                Billet <span className="font-mono text-gold-light">{c.code}</span> émis pour {c.nom} (+221 {c.telephone})
+              </p>
+              <div className="flex items-center gap-2">
+                <a
+                  href={lienWhatsApp(c)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setConfirmes((liste) => liste.map((x) => (x.reference === c.reference ? { ...x, envoye: true } : x)))}
+                  className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition ${c.envoye ? 'border border-emerald-500/40 text-emerald-300' : 'bg-emerald-500 text-ink hover:bg-emerald-400'}`}
+                >
+                  {c.envoye ? 'Renvoyer sur WhatsApp' : 'Envoyer le billet sur WhatsApp'}
+                </a>
+                <button onClick={() => setConfirmes((liste) => liste.filter((x) => x.reference !== c.reference))} className="p-2 text-muted hover:text-cream" aria-label="Masquer">
+                  <IconX className="h-4 w-4" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {erreur && <p className="border-b border-line bg-red-500/10 px-4 py-2 text-sm text-red-300">{erreur}</p>}
 

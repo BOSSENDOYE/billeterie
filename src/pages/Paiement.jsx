@@ -40,7 +40,7 @@ function Etape({ n, titre, fait, children }) {
 export default function Paiement() {
   const { reference } = useParams()
   const navigate = useNavigate()
-  const { data, error, reload } = usePolling(() => api.paiement(reference), [reference], 5000)
+  const { data, error, reload } = usePolling(() => api.paiement(reference), [reference], 4000)
   const { state } = useLocation()
   const [ouvert, setOuvert] = useState(Boolean(state?.waveOuvert))
   const [erreur, setErreur] = useState('')
@@ -93,7 +93,22 @@ export default function Paiement() {
           </div>
         </div>
 
-        {p.statut === 'en_attente' && (
+        {p.statut === 'en_attente' && p.automatique && (
+          <div className="mt-6 space-y-4">
+            <a
+              href={p.wave_url}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98]"
+            >
+              <WaveMark /> Payer {formatPrix(p.montant)} avec Wave
+            </a>
+            <div className="flex items-center gap-3 rounded-xl border border-line bg-ink/60 px-4 py-3 text-sm text-muted">
+              <Spinner className="h-5 w-5 shrink-0" />
+              <p>En attente de la confirmation de Wave. Votre billet s'affichera automatiquement sur cette page dès le paiement effectué.</p>
+            </div>
+          </div>
+        )}
+
+        {p.statut === 'en_attente' && !p.automatique && (
           <ol className="mt-6 space-y-6">
             <Etape n="1" titre={`Payez ${formatPrix(p.montant)} avec Wave`} fait={ouvert}>
               <a

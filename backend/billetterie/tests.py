@@ -91,6 +91,12 @@ class ParcoursTest(TestCase):
         self.assertEqual(r.json()['paiement']['statut'], 'echoue')
         self.assertEqual(Ticket.objects.exclude(statut='disponible').count(), 0)
 
+    def test_validation_renvoie_le_code_du_billet(self):
+        ref = self.creer()['reference']
+        self.post(f'/api/paiements/{ref}/declarer', {})
+        p = self.post(f'/api/staff/paiements/{ref}/valider', {}, **STAFF).json()['paiement']
+        self.assertEqual(p['code'], 'PV-001')
+
     def test_double_validation_ne_vend_pas_deux_billets(self):
         ref = self.creer()['reference']
         self.post(f'/api/paiements/{ref}/declarer', {'transaction': 'T_ABC123XYZ'})
@@ -318,3 +324,103 @@ class ParcoursTest(TestCase):
     def test_nombre_papier_prevente_borne(self):
         r = self.client.post('/api/staff/billets-physiques?type=prevente&nombre=900', **STAFF)
         self.assertEqual(r.status_code, 400)
+
+
+def signer_webhook(corps, secret='whsec-test', t='1700000000'):
+    import hashlib
+    import hmac
+    return f't={t},v1=' + hmac.new(secret.encode(), t.encode() + corps, hashlib.sha256).hexdigest()
+
+
+@override_settings(STAFF_ACCESS_CODE='test-code', WAVE_API_KEY='wave-test', WAVE_WEBHOOK_SECRET='whsec-test',
+                   PAIEMENT_SIMULE=False, SITE_URL='https://billeteriecjics.com')
+class WaveCheckoutTest(TestCase):
+    def setUp(self):
+        from unittest import mock
+
+        from django.core.cache import cache
+        cache.clear()
+        self.ev = generer_demo()
+        self.sessions = {}
+
+        def appel(url, corps=None):
+            if corps is not None:
+                sid = f'cos-{len(self.sessions) + 1}'
+                self.sessions[sid] = {
+                    'id': sid, 'amount': corps['amount'], 'currency': 'XOF', 'client_reference': corps['client_reference'],
+                    'checkout_status': 'open', 'payment_status': 'processing', 'transaction_id': None,
+                    'wave_launch_url': f'https://pay.wave.com/c/{sid}', 'success_url': corps['success_url'],
+                }
+                return self.sessions[sid]
+            return self.sessions[url.rsplit('/', 1)[1]]
+
+        patch = mock.patch('billetterie.wave._appel', side_effect=appel)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def creer(self):
+        r = self.client.post('/api/paiements', json.dumps({'nom': 'Awa Ba', 'telephone': '771234567'}), content_type='application/json')
+        self.assertEqual(r.status_code, 201)
+        return r.json()['paiement']
+
+    def payer_chez_wave(self, sid, montant=None, transaction='TCN4Y4ZC3FM'):
+        s = self.sessions[sid]
+        s.update(checkout_status='complete', payment_status='succeeded', transaction_id=transaction)
+        if montant:
+            s['amount'] = str(montant)
+        return s
+
+    def webhook(self, session, signature=None):
+        corps = json.dumps({'id': 'AE_1', 'type': 'checkout.session.completed', 'data': session}).encode()
+        return self.client.post('/api/wave/webhook', corps, content_type='application/json',
+                                HTTP_WAVE_SIGNATURE=signature or signer_webhook(corps))
+
+    def test_session_wave_creee_avec_le_paiement(self):
+        p = self.creer()
+        self.assertTrue(p['automatique'])
+        self.assertEqual(p['wave_url'], 'https://pay.wave.com/c/cos-1')
+        s = self.sessions['cos-1']
+        self.assertEqual((s['amount'], s['client_reference']), ('2500', p['reference']))
+        self.assertEqual(s['success_url'], f"https://billeteriecjics.com/paiement/{p['reference']}")
+        self.assertIsNone(self.client.get('/api/evenement').json()['wave_url'])
+
+    def test_webhook_emet_le_billet_automatiquement(self):
+        ref = self.creer()['reference']
+        self.assertEqual(self.webhook(self.payer_chez_wave('cos-1')).status_code, 200)
+        p = self.client.get(f'/api/paiements/{ref}').json()['paiement']
+        self.assertEqual(p['statut'], 'reussi')
+        self.assertEqual(p['transaction_wave'], 'TCN4Y4ZC3FM')
+        t = Ticket.objects.get(pk=p['ticket_id'])
+        self.assertEqual((t.statut, t.acheteur_nom), ('vendu', 'Awa Ba'))
+        # Notification rejouée : toujours un seul billet
+        self.webhook(self.sessions['cos-1'])
+        self.assertEqual(Ticket.objects.exclude(statut='disponible').count(), 1)
+
+    def test_webhook_signature_invalide(self):
+        self.creer()
+        r = self.webhook(self.payer_chez_wave('cos-1'), signature='t=1700000000,v1=faux')
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(Ticket.objects.exclude(statut='disponible').count(), 0)
+
+    def test_montant_different_pas_de_billet(self):
+        ref = self.creer()['reference']
+        self.webhook(self.payer_chez_wave('cos-1', montant=100))
+        self.assertIsNone(self.client.get(f'/api/paiements/{ref}').json()['paiement']['ticket_id'])
+
+    def test_retour_de_wave_sans_webhook(self):
+        # Le webhook n'est pas encore arrivé : la page de paiement relit la session Wave
+        ref = self.creer()['reference']
+        self.payer_chez_wave('cos-1')
+        p = self.client.get(f'/api/paiements/{ref}').json()['paiement']
+        self.assertEqual(p['statut'], 'reussi')
+        self.assertIsNotNone(p['ticket_id'])
+
+    def test_session_expiree(self):
+        ref = self.creer()['reference']
+        self.sessions['cos-1']['checkout_status'] = 'expired'
+        self.assertEqual(self.client.get(f'/api/paiements/{ref}').json()['paiement']['statut'], 'echoue')
+
+    def test_declaration_manuelle_refusee(self):
+        ref = self.creer()['reference']
+        r = self.client.post(f'/api/paiements/{ref}/declarer', '{}', content_type='application/json')
+        self.assertEqual(r.status_code, 409)

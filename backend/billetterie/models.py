@@ -169,6 +169,9 @@ class Paiement(models.Model):
     # ID de transaction du reçu Wave, déclaré par l'acheteur ; unique pour empêcher sa réutilisation
     transaction_wave = models.CharField(max_length=60, unique=True, null=True, blank=True)
     declare_le = models.DateTimeField(null=True, blank=True)
+    # Session Wave Checkout (paiement confirmé automatiquement par Wave) et son lien de paiement
+    wave_session = models.CharField(max_length=60, unique=True, null=True, blank=True)
+    wave_lien = models.CharField(max_length=300, blank=True)
     cree_le = models.DateTimeField(auto_now_add=True)
     maj_le = models.DateTimeField(auto_now=True)
 

@@ -90,6 +90,15 @@ export default function Accueil() {
         const { paiement: confirme } = await api.simulerPaiement(paiement.reference)
         return navigate(`/billet/${confirme.ticket_id}`, { state: { nouveau: true } })
       }
+      if (paiement.automatique) {
+        // Wave Checkout : on part payer sur Wave, qui ramène ensuite sur /paiement/<référence>
+        try {
+          localStorage.setItem(PAIEMENT_EN_COURS_KEY, paiement.reference)
+        } catch {
+          /* stockage indisponible */
+        }
+        return window.location.assign(paiement.wave_url)
+      }
       navigate(`/paiement/${paiement.reference}`)
     } catch (err) {
       setErreur(err.message)
@@ -237,7 +246,11 @@ export default function Accueil() {
                 </a>
               )}
               {!data.paiement_simule && !complet && (
-                <p className="text-center text-xs text-muted">Wave s'ouvre avec le montant de {formatPrix(tarif.prix)}. Revenez ensuite ici pour recevoir votre billet.</p>
+                <p className="text-center text-xs text-muted">
+                  {data.paiement_automatique
+                    ? `Vous payez ${formatPrix(tarif.prix)} sur Wave, puis votre billet s'affiche automatiquement.`
+                    : `Wave s'ouvre avec le montant de ${formatPrix(tarif.prix)}. Revenez ensuite ici pour recevoir votre billet.`}
+                </p>
               )}
               {envoi && data.paiement_simule && <p className="animate-fade-in text-center text-sm text-wave">Paiement Wave en cours…</p>}
               <p className="text-center text-xs text-muted">Billet nominatif, non remboursable.</p>

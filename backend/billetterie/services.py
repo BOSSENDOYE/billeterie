@@ -43,6 +43,35 @@ def confirmer_paiement(paiement: Paiement) -> Paiement:
     return paiement
 
 
+def appliquer_session_wave(session: dict):
+    """Applique l'état d'une session Wave Checkout (webhook ou relecture) au paiement correspondant.
+
+    Paiement réussi au bon montant : billet émis automatiquement. Si la série est épuisée,
+    le paiement reste « à vérifier » pour que l'équipe le rembourse.
+    Session expirée sans paiement : la commande est rejetée. Retourne le paiement, ou None.
+    """
+    p = Paiement.objects.filter(reference=session.get('client_reference') or '').first()
+    if p is None or p.statut in (Paiement.Statut.REUSSI, Paiement.Statut.ECHOUE):
+        return p
+
+    if session.get('payment_status') == 'succeeded':
+        if str(session.get('amount')) != str(p.montant) or session.get('currency') != 'XOF':
+            return p  # montant inattendu : jamais de billet automatique
+        transaction_id = session.get('transaction_id') or None
+        if transaction_id and Paiement.objects.filter(transaction_wave=transaction_id).exclude(pk=p.pk).exists():
+            return p
+        p.transaction_wave = transaction_id
+        p.declare_le = p.declare_le or timezone.now()
+        p.statut = Paiement.Statut.A_VERIFIER
+        p.save(update_fields=['transaction_wave', 'declare_le', 'statut', 'maj_le'])
+        return confirmer_paiement(p)
+
+    if session.get('checkout_status') == 'expired':
+        p.statut = Paiement.Statut.ECHOUE
+        p.save(update_fields=['statut', 'maj_le'])
+    return p
+
+
 @transaction.atomic
 def vendre_guichet(ev, type_billet, nom='', telephone='', entree_immediate=True):
     """Vente sur place par l'équipe (paiement encaissé au guichet).
