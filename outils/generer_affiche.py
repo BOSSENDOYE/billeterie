@@ -33,6 +33,28 @@ OR_CLAIR, OR, OR_FONCE = (246, 222, 150), (212, 175, 55), (140, 109, 31)
 CREME = (246, 242, 234)
 GRIS = (190, 186, 178)
 RUBIS = (232, 62, 86)
+PLATINE = (214, 222, 236)
+
+# (libellé, couleur du libellé, prix, couleur du prix)
+TARIFS = [
+    ('PRÉVENTE', OR, '2 500 FCFA', OR_CLAIR),
+    ('JOUR J', RUBIS, '3 000 FCFA', CREME),
+    ('VIP', OR_CLAIR, '10 000 FCFA', OR_CLAIR),
+    ('VVIP', PLATINE, '25 000 FCFA', CREME),
+]
+
+
+def grille_tarifs(d, x, y, largeur, u, t_etiq, t_prix, pas):
+    """Tarifs en 2 colonnes x 2 lignes : libellé au-dessus, prix en dessous. Retourne le bas."""
+    col = largeur / 2
+    f_prix = bahn(t_prix, 'Bold')
+    for _, _, prix, _ in TARIFS:  # même taille de prix partout, ajustée à la colonne
+        f_prix = min(f_prix, taille_ajustee(prix, lambda t: bahn(t, 'Bold'), t_prix, col - 1.5 * u), key=lambda f: f.size)
+    for i, (etiquette, couleur, prix, couleur_prix) in enumerate(TARIFS):
+        cx, cy = x + (i % 2) * col, y + (i // 2) * pas
+        texte(d, cx, cy, etiquette, bahn(t_etiq, 'Bold'), couleur, lettrage=0.25 * u)
+        d.text((cx, cy + t_etiq * 1.15), prix, font=f_prix, fill=couleur_prix)
+    return y + 2 * pas
 
 FONTS = 'C:/Windows/Fonts/'
 
@@ -197,17 +219,19 @@ def generer(nom, largeur_mm, hauteur_mm, source):
     # --- Nom de l'artiste, en grand, en bas à gauche
     largeur_nom = qx - 4 * u - marge
     titre = taille_ajustee('DIP DOUNDOU GUISS', serif, 16 * u, largeur_nom)
-    _, haut_nom, _, bas_nom = texte_or(affiche, marge, 55.5 * u, 'DIP DOUNDOU GUISS', titre, ombre=30)
+    _, haut_nom, _, bas_nom = texte_or(affiche, marge, 50.5 * u, 'DIP DOUNDOU GUISS', titre, ombre=30)
     d = ImageDraw.Draw(affiche)
     bas_invite = ligne_invite(d, marge + 0.4 * u, bas_nom + 2.2 * u, 4.4 * u)
 
     # --- Tarifs, sous le nom
     yt = bas_invite + 2.6 * u
     x = marge
-    for etiquette, couleur, prix in (('PRÉVENTE', OR, '2 500 FCFA'), ('JOUR J', RUBIS, '3 000 FCFA')):
-        f_etiq, f_prix = bahn(2.4 * u, 'Bold'), bahn(5 * u, 'Bold')
-        le = texte(d, x, yt + 1.6 * u, etiquette, f_etiq, couleur, lettrage=0.3 * u)
-        d.text((x + le + 1.4 * u, yt), prix, font=f_prix, fill=CREME if etiquette == 'JOUR J' else OR_CLAIR)
+    f_etiq, f_prix = bahn(2.2 * u, 'Bold'), bahn(4.2 * u, 'Bold')
+    for i, (etiquette, couleur, prix, couleur_prix) in enumerate(TARIFS):
+        if i == 2:  # deuxième ligne : VIP
+            x, yt = marge, yt + 5.6 * u
+        le = texte(d, x, yt + 1.4 * u, etiquette, f_etiq, couleur, lettrage=0.3 * u)
+        d.text((x + le + 1.4 * u, yt), prix, font=f_prix, fill=couleur_prix)
         x += le + 1.4 * u + d.textlength(prix, font=f_prix) + 5 * u
 
     # --- Infoline
@@ -285,12 +309,8 @@ def generer_flyer(nom, largeur_mm, hauteur_mm, source):
     d = ImageDraw.Draw(affiche)
     texte(d, qx + cote / 2, qy + cote + 1.5 * u, 'SCANNEZ & RÉSERVEZ', bahn(1.45 * u, 'Bold'), OR_CLAIR, ancre='centre')
 
-    yt = haut_bloc + 0.6 * u
-    for etiquette, couleur, prix, couleur_prix in (('PRÉVENTE', OR, '2 500 FCFA', OR_CLAIR), ('JOUR J', RUBIS, '3 000 FCFA', CREME)):
-        texte(d, marge, yt, etiquette, bahn(1.9 * u, 'Bold'), couleur, lettrage=0.25 * u)
-        d.text((marge, yt + 2.2 * u), prix, font=bahn(4.1 * u, 'Bold'), fill=couleur_prix)
-        yt += 6.4 * u
-    texte(d, marge, yt - 0.4 * u, SITE, bahn(1.9 * u, 'SemiBold'), GRIS)
+    yt = grille_tarifs(d, marge, haut_bloc + 0.2 * u, qx - 2.5 * u - marge, u, 1.8 * u, 3.6 * u, 5.9 * u)
+    texte(d, marge, yt + 0.1 * u, SITE, bahn(1.9 * u, 'SemiBold'), GRIS)
 
     # Infoline
     yl = 90.3 * u

@@ -1,4 +1,4 @@
-"""PDF des billets papier (Jour J et Prévente) : 10 billets par page A4, avec repères de coupe.
+"""PDF des billets papier (Jour J et Prévente) : 4 grands billets (121 x 68 mm) par page A4, avec repères de coupe.
 
 Même apparence que le billet de la plateforme : fond sombre, photo de l'artiste, nom en dégradé,
 bloc date, souche avec bandeau et QR code — rubis pour le Jour J, or pour la Prévente.
@@ -30,9 +30,12 @@ PALETTES = {
     'jour_j': {'clair': '#FF8B94', 'base': '#E0314B', 'fonce': '#7A0F1F', 'texte_bandeau': '#FFFFFF'},
 }
 
-# Gabarit : 2 colonnes x 5 lignes, billets séparés de 3 mm (coupe nette sans liseré)
-COLONNES, LIGNES = 2, 5
-L_BILLET, H_BILLET = 93 * mm, 52 * mm
+# Le billet est dessiné sur un gabarit de 93 x 52 mm puis agrandi d'ECHELLE à l'impression
+# (1,3 → 121 x 68 mm). Gabarit de page : 1 colonne x 4 lignes, billets séparés de 3 mm.
+ECHELLE = 1.3
+COLONNES, LIGNES = 1, 4
+L_BASE, H_BASE = 93 * mm, 52 * mm
+L_BILLET, H_BILLET = L_BASE * ECHELLE, H_BASE * ECHELLE
 ESPACE = 3 * mm
 MARGE_X = (A4[0] - COLONNES * L_BILLET - (COLONNES - 1) * ESPACE) / 2
 MARGE_Y = (A4[1] - LIGNES * H_BILLET - (LIGNES - 1) * ESPACE) / 2
@@ -186,15 +189,26 @@ def _reperes(c, x, y):
 
 
 def _billet(c, ticket, ev, x, y, design, type_billet):
+    """Repères à la taille réelle, puis billet dessiné sur le gabarit de base, agrandi d'ECHELLE."""
+    _reperes(c, x, y)
+    c.saveState()
+    c.translate(x, y)
+    c.scale(ECHELLE, ECHELLE)
+    _dessin_billet(c, ticket, ev, design, type_billet)
+    c.restoreState()
+
+
+def _dessin_billet(c, ticket, ev, design, type_billet):
+    x, y = 0, 0
+    L_BILLET, H_BILLET = L_BASE, H_BASE  # coordonnées du gabarit (avant agrandissement)
     pal = _palette(type_billet, design)
     principal = L_BILLET - SOUCHE
-    _reperes(c, x, y)
 
     # Fond sombre + photo (partie principale)
     c.setFillColor(ENCRE)
     c.rect(x, y, L_BILLET, H_BILLET, stroke=0, fill=1)
-    largeur_px = round(principal / mm / 25.4 * DPI_PHOTO)
-    hauteur_px = round(H_BILLET / mm / 25.4 * DPI_PHOTO)
+    largeur_px = round(principal * ECHELLE / mm / 25.4 * DPI_PHOTO)
+    hauteur_px = round(H_BILLET * ECHELLE / mm / 25.4 * DPI_PHOTO)
     c.drawImage(_photo_fond(type_billet, largeur_px, hauteur_px), x, y, principal, H_BILLET)
 
     # Textes de la partie principale

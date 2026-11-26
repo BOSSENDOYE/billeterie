@@ -164,7 +164,7 @@ export default function BilletsPapier({ evenement: ev, serie, onChange, type = '
         <div className="max-w-xl">
           <h2 className="font-semibold">{conf.titre}</h2>
           <p className="mt-1 text-sm text-muted">
-            PDF de {nombre} billets ({formatPrix(prix)}), 10 par page A4 avec traits de coupe. Chaque QR code ne permet qu'une seule
+            PDF de {nombre} billets ({formatPrix(prix)}), 4 grands billets par page A4 avec traits de coupe. Chaque QR code ne permet qu'une seule
             entrée.{!jourJ && ' Les billets Prévente vendus en ligne ne changent pas.'}
           </p>
           <p className="mt-2 text-sm">

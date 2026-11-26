@@ -203,7 +203,7 @@ class ParcoursTest(TestCase):
     def test_impression_des_200_billets_jour_j(self):
         r = self.imprimer()
         pages = re.findall(rb'/Type\s*/Page[^s]', r.content)
-        self.assertEqual(len(pages), 20)  # 200 billets, 10 par page
+        self.assertEqual(len(pages), 50)  # 200 billets, 4 par page
         papier = Ticket.objects.filter(type='jour_j', physique=True)
         self.assertEqual(papier.count(), 200)
         self.assertFalse(papier.exclude(statut='vendu').exists())
@@ -290,7 +290,7 @@ class ParcoursTest(TestCase):
 
     def test_cent_billets_prevente_papier(self):
         r = self.imprimer_prevente()
-        self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 10)  # 100 billets, 10 par page
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 25)  # 100 billets, 4 par page
         papier = Ticket.objects.filter(type='prevente', physique=True)
         self.assertEqual(papier.count(), 100)
         self.assertEqual(sorted(papier.values_list('numero', flat=True))[:2], [301, 302])

@@ -488,8 +488,8 @@ def staff_billets_physiques(request):
 @staff_requis
 @require_POST
 def staff_apercu_papier(request):
-    """Aperçu du billet papier d'un type : une page (10 billets), sans rien émettre."""
-    from .impression import generer_pdf
+    """Aperçu du billet papier d'un type : une page de billets, sans rien émettre."""
+    from .impression import COLONNES, LIGNES, generer_pdf
 
     ev, err = evenement_ou_404()
     if err:
@@ -499,7 +499,8 @@ def staff_apercu_papier(request):
         return erreur('Type de billet invalide')
     serie = ev.tickets.filter(type=type_billet)
     ordre = '-numero' if type_billet == TypeBillet.PREVENTE else 'numero'
-    tickets = list(serie.filter(physique=True).order_by('numero')[:10]) or list(serie.order_by(ordre)[:10])
+    par_page = COLONNES * LIGNES
+    tickets = list(serie.filter(physique=True).order_by('numero')[:par_page]) or list(serie.order_by(ordre)[:par_page])
     return _pdf(generer_pdf(tickets, ev, type_billet), f'apercu-billet-{type_billet}.pdf')
 
 
