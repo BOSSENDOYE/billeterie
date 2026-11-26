@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api, usePolling } from '../lib/api'
 import { dateCourte, formatPrix } from '../lib/format'
+import { typeBillet } from '../lib/typesBillet'
 import { IconCheck, IconX } from './Icons'
 import { Spinner } from './ui'
 
@@ -98,8 +99,8 @@ export default function PaiementsAVerifier({ onChange }) {
               <div className="min-w-40 flex-1">
                 <p className="font-medium">
                   {p.nom}{' '}
-                  <span className={`ml-1 rounded-full border px-2 py-0.5 align-middle text-[10px] font-bold tracking-wider ${p.type === 'jour_j' ? 'border-ruby/60 text-ruby-light' : 'border-gold/50 text-gold-light'}`}>
-                    {p.type === 'jour_j' ? 'JOUR J' : 'PRÉVENTE'}
+                  <span className={`ml-1 rounded-full border px-2 py-0.5 align-middle text-[10px] font-bold tracking-wider ${typeBillet(p.type).badge}`}>
+                    {typeBillet(p.type).bandeau}
                   </span>
                 </p>
                 <p className="text-xs text-muted">Déclaré payé le {dateCourte(p.declare_le)} · {p.reference}</p>

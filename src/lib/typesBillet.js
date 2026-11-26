@@ -1,9 +1,10 @@
-// Apparence des deux séries de billets. Classes Tailwind écrites en entier (détectées au build).
+// Apparence des séries de billets. Classes Tailwind écrites en entier (détectées au build).
 export const TYPES = {
   prevente: {
     label: 'Prévente',
     bandeau: 'PRÉVENTE',
     cadre: 'bg-gradient-gold shadow-gold/10',
+    barre: 'bg-gradient-gold',
     titre: 'text-gradient-gold',
     accent: 'text-gold',
     accentClair: 'text-gold-light',
@@ -15,12 +16,14 @@ export const TYPES = {
     teinte: '',
     ruban: 'bg-gradient-gold text-ink',
     badge: 'border-gold/50 bg-gold/15 text-gold-light',
+    choix: 'border-gold bg-gold/10',
     pleinEcran: 'bg-[#D4AF37] text-[#0A0A0B]',
   },
   jour_j: {
     label: 'Jour J',
     bandeau: 'JOUR J',
     cadre: 'bg-gradient-ruby shadow-ruby/25',
+    barre: 'bg-gradient-ruby',
     titre: 'text-gradient-ruby',
     accent: 'text-ruby',
     accentClair: 'text-ruby-light',
@@ -32,8 +35,54 @@ export const TYPES = {
     teinte: 'bg-ruby-dark/35 mix-blend-multiply',
     ruban: 'bg-gradient-ruby text-white',
     badge: 'border-ruby/60 bg-ruby/15 text-ruby-light',
+    choix: 'border-ruby bg-ruby/10',
     pleinEcran: 'bg-[#E0314B] text-white',
+  },
+  vip: {
+    label: 'VIP',
+    bandeau: 'VIP',
+    cadre: 'bg-gradient-amethyst shadow-amethyst/25',
+    barre: 'bg-gradient-amethyst',
+    titre: 'text-gradient-amethyst',
+    accent: 'text-amethyst',
+    accentClair: 'text-amethyst-light',
+    champ: 'text-amethyst-light/80',
+    bordure: 'border-amethyst/60',
+    anneau: 'ring-amethyst/60',
+    pointilles: 'border-amethyst/50',
+    reflet: 'via-amethyst-light/10',
+    teinte: 'bg-amethyst-dark/30 mix-blend-multiply',
+    ruban: 'bg-gradient-amethyst text-white',
+    badge: 'border-amethyst/60 bg-amethyst/15 text-amethyst-light',
+    choix: 'border-amethyst bg-amethyst/10',
+    pleinEcran: 'bg-[#A66BF0] text-white',
+  },
+  vvip: {
+    label: 'VVIP',
+    bandeau: 'VVIP',
+    cadre: 'bg-gradient-platinum shadow-platinum/20',
+    barre: 'bg-gradient-platinum',
+    titre: 'text-gradient-platinum',
+    accent: 'text-platinum',
+    accentClair: 'text-platinum-light',
+    champ: 'text-platinum/80',
+    bordure: 'border-platinum/60',
+    anneau: 'ring-platinum/60',
+    pointilles: 'border-platinum/50',
+    reflet: 'via-platinum-light/15',
+    teinte: '',
+    ruban: 'bg-gradient-platinum text-ink',
+    badge: 'border-platinum/60 bg-platinum/15 text-platinum-light',
+    choix: 'border-platinum bg-platinum/10',
+    pleinEcran: 'bg-[#C9D3E3] text-[#0A0A0B]',
   },
 }
 
+// Ordre d'affichage des séries (tableau de bord, guichet)
+export const ORDRE_TYPES = ['prevente', 'jour_j', 'vip', 'vvip']
+
 export const typeBillet = (type) => TYPES[type] ?? TYPES.prevente
+
+/** Prix d'un type à partir de l'événement renvoyé par l'API. */
+export const prixDe = (ev, type) =>
+  ({ prevente: ev.prix_prevente, jour_j: ev.prix_jour_j, vip: ev.prix_vip, vvip: ev.prix_vvip })[type] ?? ev.prix

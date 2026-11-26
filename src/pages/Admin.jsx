@@ -7,7 +7,7 @@ import BilletsPapier from '../components/BilletsPapier'
 import { btn, ErrorState, Logo, PageLoader, input } from '../components/ui'
 import { api, usePolling } from '../lib/api'
 import { dateCourte, dateEvenement, formatPrix } from '../lib/format'
-import { typeBillet } from '../lib/typesBillet'
+import { ORDRE_TYPES, typeBillet } from '../lib/typesBillet'
 
 const FILTRES = [
   { id: 'tous', label: 'Tous' },
@@ -20,6 +20,8 @@ const FILTRES_TYPE = [
   { id: 'tous', label: 'Tous types' },
   { id: 'prevente', label: 'Prévente' },
   { id: 'jour_j', label: 'Jour J' },
+  { id: 'vip', label: 'VIP' },
+  { id: 'vvip', label: 'VVIP' },
 ]
 
 const BADGE = {
@@ -44,7 +46,7 @@ function Serie({ type, serie }) {
       </p>
       <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-line">
         <div className="bg-emerald-400 transition-all duration-700" style={{ width: pct(serie.scannes) }} />
-        <div className={`transition-all duration-700 ${type === 'jour_j' ? 'bg-gradient-ruby' : 'bg-gradient-gold'}`} style={{ width: pct(serie.vendus - serie.scannes) }} />
+        <div className={`transition-all duration-700 ${th.barre}`} style={{ width: pct(serie.vendus - serie.scannes) }} />
       </div>
       <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted">
         <span>{serie.scannes} entrés · {serie.restants} restants</span>
@@ -132,14 +134,14 @@ export default function Admin() {
       <PaiementsAVerifier onChange={() => { stats.reload(); liste.reload() }} />
 
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Capacité" valeur={s.total} detail={`${ev.quota_prevente} prévente + ${ev.quota_jour_j} Jour J`} />
+        <Stat label="Capacité" valeur={s.total} detail={`${ev.quota_prevente} prévente + ${ev.quota_jour_j} Jour J + ${ev.quota_vip ?? 0} VIP + ${ev.quota_vvip ?? 0} VVIP`} />
         <Stat label="Vendus" valeur={s.vendus} detail={`Recette : ${formatPrix(s.recette)}`} accent="text-gold-light" />
         <Stat label="Entrées" valeur={s.scannes} detail={s.vendus ? `${Math.round((s.scannes / s.vendus) * 100)} % des billets vendus` : null} accent="text-emerald-300" />
         <Stat label="Restants" valeur={s.restants} detail={`${Math.round((s.restants / s.total) * 100)} % de la jauge`} />
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {s.par_type && ['prevente', 'jour_j'].map((t) => <Serie key={t} type={t} serie={s.par_type[t]} />)}
+        {s.par_type && ORDRE_TYPES.filter((t) => s.par_type[t]).map((t) => <Serie key={t} type={t} serie={s.par_type[t]} />)}
       </div>
 
       {s.par_type && (

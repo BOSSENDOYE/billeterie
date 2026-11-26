@@ -12,6 +12,23 @@ def evenement_actif():
     return Evenement.objects.filter(actif=True).first()
 
 
+def creer_billets_manquants(ev):
+    """Crée les billets manquants de chaque série jusqu'à son quota et met la capacité à jour.
+
+    Les billets existants (vendus ou non) ne sont jamais supprimés.
+    """
+    for type_billet in TypeBillet.values:
+        existants = set(Ticket.objects.filter(evenement=ev, type=type_billet).values_list('numero', flat=True))
+        Ticket.objects.bulk_create(
+            Ticket(evenement=ev, type=type_billet, numero=n)
+            for n in range(1, ev.quota_de(type_billet) + 1) if n not in existants
+        )
+    capacite = sum(ev.quota_de(t) for t in TypeBillet.values)
+    if ev.capacite != capacite:
+        ev.capacite = capacite
+        ev.save(update_fields=['capacite'])
+
+
 @transaction.atomic
 def confirmer_paiement(paiement: Paiement) -> Paiement:
     """Confirme le paiement et attribue le prochain billet libre de son type (verrou de ligne).
@@ -226,16 +243,16 @@ def generer_demo(vendus=0, scannes=0):
         prix_jour_j=3000,
         quota_prevente=400,
         quota_jour_j=200,
-        capacite=600,
+        prix_vip=10000,
+        prix_vvip=25000,
+        quota_vip=100,
+        quota_vvip=50,
+        capacite=750,
         # Prévente jusqu'à la veille 23h59, Jour J à partir du 26 décembre 00h00
         fin_prevente=datetime.combine(datetime(2026, 12, 26).date(), time(0, 0), tzinfo=tz),
         image_url='/artiste.jpeg',
     )
-    Ticket.objects.bulk_create(
-        Ticket(evenement=ev, type=type_billet, numero=n)
-        for type_billet in (TypeBillet.PREVENTE, TypeBillet.JOUR_J)
-        for n in range(1, ev.quota_de(type_billet) + 1)
-    )
+    creer_billets_manquants(ev)
 
     rnd = random.Random(2026)
     now = timezone.now()

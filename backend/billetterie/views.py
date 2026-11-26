@@ -16,7 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from . import services, wave
-from .models import Paiement, Scan, Ticket, TypeBillet
+from .models import TYPES_VIP, Paiement, Scan, Ticket, TypeBillet
 
 TEL_RE = re.compile(r'^7[05678]\d{7}$')
 # ID de transaction Wave : lettres, chiffres, tirets et underscores
@@ -60,13 +60,17 @@ def ser_evenement(ev, prive=False):
         'prix_jour_j': ev.prix_jour_j,
         'quota_prevente': ev.quota_prevente,
         'quota_jour_j': ev.quota_jour_j,
+        'prix_vip': ev.prix_vip,
+        'prix_vvip': ev.prix_vvip,
+        'quota_vip': ev.quota_vip,
+        'quota_vvip': ev.quota_vvip,
         'fin_prevente': ev.fin_prevente.isoformat() if ev.fin_prevente else None,
         'capacite': ev.capacite,
         'image': ev.image_url,
     }
     if not prive:
         # Chiffres de la jauge privés : visibles seulement dans le tableau de bord
-        for cle in ('capacite', 'quota_prevente', 'quota_jour_j'):
+        for cle in ('capacite', 'quota_prevente', 'quota_jour_j', 'quota_vip', 'quota_vvip'):
             data.pop(cle)
     return data
 
@@ -169,12 +173,28 @@ def evenement_ou_404():
 
 # --- Public ------------------------------------------------------------------
 
+def tarifs_vip(ev, par_type):
+    """Billets VIP / VVIP vendus en ligne, sans chiffres de jauge publics."""
+    en_vente = ev.vip_en_vente()
+    return [
+        {
+            'type': t,
+            'prix': ev.prix_de(t),
+            'en_vente': en_vente,
+            'complet': par_type[t]['restants'] == 0,
+            'dernieres_places': 0 < par_type[t]['restants'] < 10,
+        }
+        for t in TYPES_VIP
+    ]
+
+
 @require_GET
 def evenement(request):
     ev, err = evenement_ou_404()
     if err:
         return err
     tarif = tarif_en_vente(ev)
+    vip = tarifs_vip(ev, stats(ev)['par_type'])
     return JsonResponse({
         'evenement': ser_evenement(ev),
         # Pas de nombre de places en public : seulement « complet » / « dernières places »
@@ -191,6 +211,8 @@ def evenement(request):
         # Lien marchand avec le montant pré-rempli : le bouton l'ouvre directement.
         # Avec Wave Checkout, le lien est propre à chaque commande (créé avec le paiement).
         'wave_url': None if wave.actif() else wave_url(tarif['prix']),
+        # Billets VIP / VVIP : en ligne jusqu'au concert, avec leur propre lien Wave (montant pré-rempli)
+        'tarifs_vip': [{**v, 'wave_url': None if wave.actif() else wave_url(v['prix'])} for v in vip],
     })
 
 
@@ -207,13 +229,26 @@ def creer_paiement(request):
         return erreur('Nom invalide')
     if not TEL_RE.match(tel):
         return erreur('Numéro invalide : 9 chiffres commençant par 70, 75, 76, 77 ou 78')
-    tarif = tarif_en_vente(ev)
-    if tarif['type'] == TypeBillet.JOUR_J:
-        return erreur(f"Prévente terminée : billets Jour J en vente sur place ({ev.prix_jour_j} FCFA)", 409)
-    if tarif['restants'] == 0:
-        message = ('Prévente épuisée : les billets Jour J seront en vente le jour du concert'
-                   if tarif['type'] == TypeBillet.PREVENTE else 'Complet : tous les billets Jour J sont vendus')
-        return erreur(message, 409)
+    type_demande = data.get('type')
+    if type_demande in TYPES_VIP:
+        # Billet VIP / VVIP : vendu en ligne jusqu'au concert
+        label = TypeBillet(type_demande).label
+        if not ev.vip_en_vente():
+            return erreur(f'La vente des billets {label} est terminée', 409)
+        restants = stats(ev)['par_type'][type_demande]['restants']
+        if restants == 0:
+            return erreur(f'Complet : tous les billets {label} sont vendus', 409)
+        tarif = {'type': type_demande, 'prix': ev.prix_de(type_demande)}
+    elif type_demande not in (None, '', TypeBillet.PREVENTE, TypeBillet.JOUR_J):
+        return erreur('Type de billet invalide')
+    else:
+        tarif = tarif_en_vente(ev)
+        if tarif['type'] == TypeBillet.JOUR_J:
+            return erreur(f"Prévente terminée : billets Jour J en vente sur place ({ev.prix_jour_j} FCFA)", 409)
+        if tarif['restants'] == 0:
+            message = ('Prévente épuisée : les billets Jour J seront en vente le jour du concert'
+                       if tarif['type'] == TypeBillet.PREVENTE else 'Complet : tous les billets Jour J sont vendus')
+            return erreur(message, 409)
 
     tel_fmt = f'{tel[:2]} {tel[2:5]} {tel[5:7]} {tel[7:]}'
     p = Paiement.objects.create(evenement=ev, nom=nom, telephone=tel_fmt, type=tarif['type'], montant=tarif['prix'])
@@ -448,8 +483,9 @@ def staff_vente_guichet(request):
 
 
 def _type_papier(request):
+    """Billets papier : Jour J et Prévente seulement (VIP / VVIP vendus en ligne et au guichet)."""
     type_billet = request.GET.get('type', TypeBillet.JOUR_J)
-    return type_billet if type_billet in TypeBillet.values else None
+    return type_billet if type_billet in (TypeBillet.JOUR_J, TypeBillet.PREVENTE) else None
 
 
 def _pdf(contenu, nom):

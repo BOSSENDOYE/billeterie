@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { api } from '../lib/api'
 import { formatPrix } from '../lib/format'
-import { typeBillet } from '../lib/typesBillet'
+import { ORDRE_TYPES, prixDe, typeBillet } from '../lib/typesBillet'
 import { IconCheck } from './Icons'
 import { btn, input, Spinner } from './ui'
 
@@ -22,7 +22,7 @@ export default function VenteGuichet({ evenement: ev, stats, onVente }) {
   const [vendu, setVendu] = useState(null)
 
   const restants = stats.par_type?.[type]?.restants ?? 0
-  const prix = type === 'jour_j' ? ev.prix_jour_j : ev.prix_prevente
+  const prix = prixDe(ev, type)
 
   async function vendre(e) {
     e.preventDefault()
@@ -52,7 +52,7 @@ export default function VenteGuichet({ evenement: ev, stats, onVente }) {
       <div className="grid gap-6 p-4 lg:grid-cols-[1fr_auto]">
         <form onSubmit={vendre} className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
-            {['prevente', 'jour_j'].map((t) => {
+            {ORDRE_TYPES.map((t) => {
               const th = typeBillet(t)
               const actif = type === t
               return (
@@ -63,7 +63,7 @@ export default function VenteGuichet({ evenement: ev, stats, onVente }) {
                   className={`rounded-xl border p-3 text-left transition ${actif ? th.badge : 'border-line text-muted hover:text-cream'}`}
                 >
                   <span className="block text-xs font-bold tracking-[0.2em]">{th.bandeau}</span>
-                  <span className="block font-display text-xl font-bold">{formatPrix(t === 'jour_j' ? ev.prix_jour_j : ev.prix_prevente)}</span>
+                  <span className="block font-display text-xl font-bold">{formatPrix(prixDe(ev, t))}</span>
                   <span className="block text-[11px]">
                     {stats.par_type?.[t]?.physiques > 0 ? 'Billets papier imprimés' : `${stats.par_type?.[t]?.restants ?? '—'} restants`}
                   </span>

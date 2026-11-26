@@ -20,6 +20,14 @@
   --color-ruby-light: #FF8B94;
   --color-ruby-dark: #7A0F1F;
 
+  /* Billets VIP : améthyste ; billets VVIP : platine */
+  --color-amethyst: #A66BF0;
+  --color-amethyst-light: #D4B6FA;
+  --color-amethyst-dark: #4E1F8C;
+  --color-platinum: #C9D3E3;
+  --color-platinum-light: #F2F5FA;
+  --color-platinum-dark: #6E7A8E;
+
   --color-wave: #1DC8E5;
   --color-wave-dark: #001A72;
 
@@ -69,6 +77,28 @@
 
 @utility bg-gradient-gold {
   background: linear-gradient(135deg, var(--color-gold-light), var(--color-gold) 50%, var(--color-gold-dark));
+}
+
+@utility text-gradient-amethyst {
+  background: linear-gradient(100deg, var(--color-amethyst-light), var(--color-amethyst) 50%, var(--color-amethyst-dark));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-gradient-amethyst {
+  background: linear-gradient(135deg, var(--color-amethyst-light), var(--color-amethyst) 50%, var(--color-amethyst-dark));
+}
+
+@utility text-gradient-platinum {
+  background: linear-gradient(100deg, var(--color-platinum-light), var(--color-platinum) 50%, var(--color-platinum-dark));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-gradient-platinum {
+  background: linear-gradient(135deg, var(--color-platinum-light), var(--color-platinum) 50%, var(--color-platinum-dark));
 }
 
 @media print {

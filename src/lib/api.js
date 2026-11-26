@@ -79,7 +79,8 @@ async function telechargerFichier(path, nomFichier) {
 
 export const api = {
   evenement: () => request('evenement'),
-  creerPaiement: (nom, telephone) => request('paiements', { method: 'POST', body: { nom, telephone } }),
+  // type : omis = tarif standard en cours (prévente) ; 'vip' ou 'vvip'
+  creerPaiement: (nom, telephone, type) => request('paiements', { method: 'POST', body: { nom, telephone, type } }),
   paiement: (ref) => request(`paiements/${ref}`),
   simulerPaiement: (ref) => request(`paiements/${ref}/simuler`, { method: 'POST', body: {} }),
   declarerPaiement: (ref) => request(`paiements/${ref}/declarer`, { method: 'POST', body: {} }),

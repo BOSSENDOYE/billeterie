@@ -68,7 +68,7 @@ class ParcoursTest(TestCase):
         self.assertEqual(self.post('/api/staff/scan', {'qr': qr}, **STAFF).json()['resultat'], 'utilise')
 
         stats = self.client.get('/api/staff/stats', **STAFF).json()['stats']
-        self.assertEqual((stats['vendus'], stats['scannes'], stats['restants']), (1, 1, 599))
+        self.assertEqual((stats['vendus'], stats['scannes'], stats['restants']), (1, 1, 749))
         self.assertEqual(stats['par_type']['prevente']['restants'], 399)
         self.assertEqual(stats['par_type']['jour_j']['restants'], 200)
 
@@ -190,6 +190,56 @@ class ParcoursTest(TestCase):
 
     def test_vente_guichet_reservee_au_personnel(self):
         self.assertEqual(self.post('/api/staff/vente-guichet', {'type': 'jour_j'}).status_code, 401)
+
+    # --- VIP / VVIP --------------------------------------------------------
+
+    def test_series_vip(self):
+        self.assertEqual(Ticket.objects.filter(type='vip').count(), 100)
+        self.assertEqual(Ticket.objects.filter(type='vvip').count(), 50)
+        d = self.client.get('/api/evenement').json()
+        self.assertEqual([(t['type'], t['prix'], t['en_vente']) for t in d['tarifs_vip']], [('vip', 10000, True), ('vvip', 25000, True)])
+        self.assertIn('amount=25000', d['tarifs_vip'][1]['wave_url'])
+        self.assertFalse({'quota_vip', 'quota_vvip'} & set(d['evenement']))
+
+    def test_achat_vip_et_vvip(self):
+        for type_billet, prix, code in (('vip', 10000, 'VIP-001'), ('vvip', 25000, 'VVIP-001')):
+            r = self.post('/api/paiements', {'nom': 'Awa Ba', 'telephone': '771234567', 'type': type_billet})
+            self.assertEqual(r.status_code, 201)
+            p = r.json()['paiement']
+            self.assertEqual((p['type'], p['montant']), (type_billet, prix))
+            self.assertIn(f'amount={prix}', p['wave_url'])
+            self.post(f"/api/paiements/{p['reference']}/declarer", {})
+            v = self.post(f"/api/staff/paiements/{p['reference']}/valider", {}, **STAFF).json()['paiement']
+            self.assertEqual(v['code'], code)
+        stats = self.client.get('/api/staff/stats', **STAFF).json()['stats']['par_type']
+        self.assertEqual((stats['vip']['recette'], stats['vvip']['recette']), (10000, 25000))
+
+    def test_vip_en_vente_le_jour_j(self):
+        self.passer_au_jour_j()
+        r = self.post('/api/paiements', {'nom': 'Awa Ba', 'telephone': '771234567', 'type': 'vip'})
+        self.assertEqual(r.status_code, 201)
+
+    def test_vip_complet_et_apres_concert(self):
+        Ticket.objects.filter(type='vvip').update(statut='vendu')
+        r = self.post('/api/paiements', {'nom': 'Awa Ba', 'telephone': '771234567', 'type': 'vvip'})
+        self.assertEqual(r.status_code, 409)
+        self.ev.date = timezone.now() - timedelta(minutes=1)
+        self.ev.save()
+        r = self.post('/api/paiements', {'nom': 'Awa Ba', 'telephone': '771234567', 'type': 'vip'})
+        self.assertEqual(r.status_code, 409)
+
+    def test_type_invalide(self):
+        r = self.post('/api/paiements', {'nom': 'Awa Ba', 'telephone': '771234567', 'type': 'gratuit'})
+        self.assertEqual(r.status_code, 400)
+
+    def test_quota_vip_augmente_cree_les_billets(self):
+        from .services import creer_billets_manquants
+        self.ev.quota_vip = 120
+        self.ev.save()
+        creer_billets_manquants(self.ev)
+        self.assertEqual(Ticket.objects.filter(type='vip').count(), 120)
+        self.ev.refresh_from_db()
+        self.assertEqual(self.ev.capacite, 770)
 
     # --- Billets papier Jour J ---------------------------------------------
 

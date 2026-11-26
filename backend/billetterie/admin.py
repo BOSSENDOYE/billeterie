@@ -1,11 +1,17 @@
 from django.contrib import admin
 
 from .models import Evenement, Paiement, Scan, Ticket
+from .services import creer_billets_manquants
 
 
 @admin.register(Evenement)
 class EvenementAdmin(admin.ModelAdmin):
-    list_display = ('titre', 'date', 'ville', 'prix', 'capacite', 'actif')
+    list_display = ('titre', 'date', 'ville', 'prix', 'prix_vip', 'prix_vvip', 'capacite', 'actif')
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Quota augmenté (ex. VIP 100 → 150) : les billets supplémentaires sont créés
+        creer_billets_manquants(obj)
 
 
 @admin.register(Ticket)

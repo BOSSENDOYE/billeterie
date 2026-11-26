@@ -13,10 +13,15 @@ from django.utils import timezone
 class TypeBillet(models.TextChoices):
     PREVENTE = 'prevente', 'Prévente'
     JOUR_J = 'jour_j', 'Jour J'
+    VIP = 'vip', 'VIP'
+    VVIP = 'vvip', 'VVIP'
 
 
-# Préfixe affiché devant le numéro : les deux séries de billets ne se confondent pas
-PREFIXES = {TypeBillet.PREVENTE: 'PV', TypeBillet.JOUR_J: 'JJ'}
+# Préfixe affiché devant le numéro : les séries de billets ne se confondent pas
+PREFIXES = {TypeBillet.PREVENTE: 'PV', TypeBillet.JOUR_J: 'JJ', TypeBillet.VIP: 'VIP', TypeBillet.VVIP: 'VVIP'}
+
+# Billets VIP / VVIP : vendus en ligne jusqu'au début du concert (prévente comme jour J)
+TYPES_VIP = (TypeBillet.VIP, TypeBillet.VVIP)
 
 
 class Evenement(models.Model):
@@ -29,8 +34,12 @@ class Evenement(models.Model):
     prix_jour_j = models.PositiveIntegerField(default=3000, help_text='Prix Jour J, en FCFA')
     quota_prevente = models.PositiveIntegerField(default=400)
     quota_jour_j = models.PositiveIntegerField(default=200)
+    prix_vip = models.PositiveIntegerField(default=10000, help_text='Prix VIP, en FCFA')
+    prix_vvip = models.PositiveIntegerField(default=25000, help_text='Prix VVIP, en FCFA')
+    quota_vip = models.PositiveIntegerField(default=100, help_text='Nombre de billets VIP (augmenter crée les billets manquants)')
+    quota_vvip = models.PositiveIntegerField(default=50, help_text='Nombre de billets VVIP (augmenter crée les billets manquants)')
     fin_prevente = models.DateTimeField(null=True, blank=True, help_text='Après cette date, la vente en ligne passe au tarif Jour J')
-    capacite = models.PositiveIntegerField(default=600, help_text='Total des deux séries')
+    capacite = models.PositiveIntegerField(default=750, help_text='Total de toutes les séries')
     image_url = models.CharField(max_length=300, blank=True, help_text='Ex : /artiste.jpeg')
     # Textes et couleur personnalisés du billet papier Jour J (vide = valeurs par défaut)
     design_papier = models.JSONField(default=dict, blank=True)
@@ -51,10 +60,22 @@ class Evenement(models.Model):
         return TypeBillet.PREVENTE
 
     def prix_de(self, type_billet):
-        return self.prix_jour_j if type_billet == TypeBillet.JOUR_J else self.prix
+        return {
+            TypeBillet.JOUR_J: self.prix_jour_j,
+            TypeBillet.VIP: self.prix_vip,
+            TypeBillet.VVIP: self.prix_vvip,
+        }.get(type_billet, self.prix)
 
     def quota_de(self, type_billet):
-        return self.quota_jour_j if type_billet == TypeBillet.JOUR_J else self.quota_prevente
+        return {
+            TypeBillet.JOUR_J: self.quota_jour_j,
+            TypeBillet.VIP: self.quota_vip,
+            TypeBillet.VVIP: self.quota_vvip,
+        }.get(type_billet, self.quota_prevente)
+
+    def vip_en_vente(self, maintenant=None):
+        """VIP / VVIP en ligne jusqu'à l'heure du concert."""
+        return (maintenant or timezone.now()) < self.date
 
 
 class Ticket(models.Model):

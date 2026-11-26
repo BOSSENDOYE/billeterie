@@ -7,6 +7,7 @@ import { api, usePolling } from '../lib/api'
 import { dateEvenement, formatPrix } from '../lib/format'
 import { PAIEMENT_EN_COURS_KEY } from './Paiement'
 import { useMesBillets } from '../lib/mesBillets'
+import { typeBillet } from '../lib/typesBillet'
 
 const GARANTIES = [
   { icon: IconShield, titre: 'Paiement sécurisé', texte: 'Réglez avec Wave, sans frais ni carte bancaire.' },
@@ -30,6 +31,7 @@ export default function Accueil() {
   const [tel, setTel] = useState('')
   const [erreur, setErreur] = useState('')
   const [envoi, setEnvoi] = useState(false)
+  const [choix, setChoix] = useState(null)
   const mesBillets = useMesBillets()
   const [enCours] = useState(() => {
     try {
@@ -47,8 +49,23 @@ export default function Accueil() {
   // Tarif en cours : prévente jusqu'à la veille du concert, puis Jour J
   const tarif = data.tarif ?? { type: 'prevente', prix: ev.prix }
   const enPrevente = tarif.type === 'prevente'
-  const complet = Boolean(tarif.complet)
   const finPrevente = ev.fin_prevente && dateEvenement(new Date(new Date(ev.fin_prevente).getTime() - 60000).toISOString())
+
+  // Billets achetables en ligne : le tarif standard en cours (prévente) + VIP / VVIP jusqu'au concert
+  const offres = [
+    ...(data.vente_en_ligne !== false ? [{ ...tarif, wave_url: data.wave_url, standard: true }] : []),
+    ...(data.tarifs_vip ?? []).filter((t) => t.en_vente),
+  ]
+  const choisi = offres.find((o) => o.type === choix) ?? offres.find((o) => !o.complet) ?? offres[0]
+  const complet = Boolean(choisi?.complet)
+  const choisir = (type) => {
+    if (offres.some((o) => o.type === type)) {
+      setChoix(type)
+      setErreur('')
+    }
+  }
+  // Type envoyé au serveur : rien pour le tarif standard (le serveur applique celui du moment)
+  const typeEnvoye = choisi && !choisi.standard ? choisi.type : undefined
 
   // Mêmes règles que le serveur : un paiement Wave ne doit pas partir pour un formulaire refusé ensuite
   function verifier() {
@@ -68,7 +85,7 @@ export default function Accueil() {
     setErreur('')
     setEnvoi(true)
     try {
-      const { paiement } = await api.creerPaiement(nom.trim(), tel)
+      const { paiement } = await api.creerPaiement(nom.trim(), tel, typeEnvoye)
       navigate(`/paiement/${paiement.reference}`, { state: { waveOuvert: true } })
     } catch (err) {
       setErreur(`${err.message} — si vous avez déjà payé sur Wave, contactez l'organisateur avec votre numéro.`)
@@ -83,7 +100,7 @@ export default function Accueil() {
     setErreur('')
     setEnvoi(true)
     try {
-      const { paiement } = await api.creerPaiement(nom.trim(), tel)
+      const { paiement } = await api.creerPaiement(nom.trim(), tel, typeEnvoye)
       if (data.paiement_simule) {
         // Mode démonstration : le paiement Wave est considéré comme effectué
         await new Promise((r) => setTimeout(r, 1500))
@@ -154,7 +171,8 @@ export default function Accueil() {
             <h2 className="font-display text-2xl font-bold">L'événement</h2>
             <p className="mt-3 max-w-prose leading-relaxed text-muted">
               {ev.artiste} investit le {ev.lieu.charAt(0).toLowerCase() + ev.lieu.slice(1)} de {ev.ville} pour une soirée unique.
-              Prévente à {formatPrix(ev.prix_prevente)}, puis {formatPrix(ev.prix_jour_j)} le jour J. Placement libre. Le billet est nominatif :
+              Prévente à {formatPrix(ev.prix_prevente)}, puis {formatPrix(ev.prix_jour_j)} le jour J.
+              {ev.prix_vip ? ` Billets VIP à ${formatPrix(ev.prix_vip)} et VVIP à ${formatPrix(ev.prix_vvip)}.` : ''} Le billet est nominatif :
               présentez votre QR code à l'entrée, depuis votre téléphone ou imprimé.
             </p>
           </div>
@@ -185,33 +203,56 @@ export default function Accueil() {
         {/* Achat */}
         <aside className="order-1 lg:order-2 lg:-mt-32">
           <div className="sticky top-24 animate-fade-in rounded-2xl border border-gold/25 bg-surface/95 p-6 shadow-2xl shadow-black/60 backdrop-blur sm:p-7">
-            {/* Deux tarifs : celui en cours est mis en avant */}
+            {/* Tarifs : touchez un billet pour le choisir ; celui choisi est mis en avant */}
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted">Choisissez votre billet</p>
             <div className="grid grid-cols-2 gap-3">
-              <div className={`rounded-xl border p-3 ${enPrevente ? 'border-gold bg-gold/10' : 'border-line opacity-50'}`}>
-                <p className="text-[11px] font-bold tracking-[0.2em] text-gold">PRÉVENTE</p>
-                <p className="mt-1 font-display text-2xl font-bold text-gold-light">{formatPrix(ev.prix_prevente)}</p>
-                <p className="mt-0.5 text-[11px] text-muted">
-                  {enPrevente ? (finPrevente ? `Jusqu'au ${finPrevente.jour} ${finPrevente.mois.toLowerCase()} 23h59` : 'En cours') : 'Terminée'}
-                </p>
-              </div>
-              <div className={`rounded-xl border p-3 ${enPrevente ? 'border-line' : 'border-ruby bg-ruby/10'}`}>
-                <p className="text-[11px] font-bold tracking-[0.2em] text-ruby-light">JOUR J</p>
-                <p className={`mt-1 font-display text-2xl font-bold ${enPrevente ? 'text-cream/70' : 'text-ruby-light'}`}>{formatPrix(ev.prix_jour_j)}</p>
-                <p className="mt-0.5 text-[11px] text-muted">{enPrevente ? 'Le jour du concert' : 'En cours'}</p>
-              </div>
+              {[
+                {
+                  type: 'prevente',
+                  prix: ev.prix_prevente,
+                  note: enPrevente ? (finPrevente ? `Jusqu'au ${finPrevente.jour} ${finPrevente.mois.toLowerCase()} 23h59` : 'En cours') : 'Terminée',
+                },
+                { type: 'jour_j', prix: ev.prix_jour_j, note: enPrevente ? 'Sur place, le jour du concert' : 'Sur place uniquement' },
+                ...(data.tarifs_vip ?? []).map((t) => ({
+                  type: t.type,
+                  prix: t.prix,
+                  note: !t.en_vente ? 'Vente terminée' : t.complet ? 'Complet' : t.dernieres_places ? 'Dernières places' : 'En ligne',
+                })),
+              ].map(({ type, prix, note }) => {
+                const th = typeBillet(type)
+                const offre = offres.find((o) => o.type === type)
+                const actif = choisi?.type === type
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    disabled={!offre}
+                    onClick={() => choisir(type)}
+                    aria-pressed={actif}
+                    className={`rounded-xl border p-3 text-left transition ${actif ? `${th.choix} ring-1 ${th.anneau}` : offre ? 'border-line hover:border-cream/30' : 'cursor-default border-line opacity-50'}`}
+                  >
+                    <p className={`text-[11px] font-bold tracking-[0.2em] ${th.accentClair}`}>{th.bandeau}</p>
+                    <p className={`mt-1 whitespace-nowrap font-display text-xl font-bold sm:text-2xl ${actif ? th.accentClair : 'text-cream/80'}`}>{formatPrix(prix)}</p>
+                    <p className="mt-0.5 text-[11px] text-muted">{note}</p>
+                  </button>
+                )
+              })}
             </div>
 
             {/* Pas de chiffres publics sur la jauge : seulement une alerte quand il reste peu de places */}
-            <p className={`mt-5 text-center text-xs font-semibold tracking-wide ${tarif.dernieres_places ? 'text-red-400' : 'text-gold-light/80'}`}>
-              {tarif.dernieres_places ? 'Dernières places disponibles' : 'Places limitées'}
+            <p className={`mt-5 text-center text-xs font-semibold tracking-wide ${choisi?.dernieres_places ? 'text-red-400' : 'text-gold-light/80'}`}>
+              {choisi?.dernieres_places ? 'Dernières places disponibles' : 'Places limitées'}
             </p>
 
-            {data.vente_en_ligne === false ? (
-              <div className="mt-6 rounded-xl border border-ruby/50 bg-ruby/10 p-5 text-center">
-                <p className="font-display text-xl font-bold text-ruby-light">Prévente terminée</p>
-                <p className="mt-2 text-sm text-cream/85">
-                  Billets Jour J à <strong>{formatPrix(ev.prix_jour_j)}</strong>, en vente sur place le jour du concert.
-                </p>
+            {!enPrevente && (
+              <p className="mt-4 rounded-xl border border-ruby/50 bg-ruby/10 px-4 py-3 text-center text-sm text-cream/85">
+                Prévente terminée : billets Jour J à <strong>{formatPrix(ev.prix_jour_j)}</strong>, en vente sur place.
+              </p>
+            )}
+
+            {!choisi ? (
+              <div className="mt-6 rounded-xl border border-line p-5 text-center">
+                <p className="font-display text-xl font-bold">Vente en ligne terminée</p>
                 <p className="mt-3 text-xs text-muted">Vous avez déjà un billet ? Retrouvez-le dans « Mes billets ».</p>
               </div>
             ) : (
@@ -229,27 +270,27 @@ export default function Accueil() {
               </label>
               {erreur && <p className="animate-fade-in text-sm text-red-400">{erreur}</p>}
 
-              {data.paiement_simule || complet || !data.wave_url ? (
+              {data.paiement_simule || complet || !choisi.wave_url ? (
                 <button disabled={complet || envoi} className="flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-40">
-                  {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : complet ? (enPrevente ? 'Prévente épuisée' : 'Complet') : <>Payer {formatPrix(tarif.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
+                  {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : complet ? (choisi.type === 'prevente' ? 'Prévente épuisée' : `${typeBillet(choisi.type).label} complet`) : <>Payer {formatPrix(choisi.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
                 </button>
               ) : (
                 <a
-                  href={data.wave_url}
+                  href={choisi.wave_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={payerAvecWave}
                   aria-disabled={envoi}
                   className={`flex w-full items-center justify-center gap-2 rounded-xl bg-wave py-4 font-bold text-wave-dark transition hover:brightness-105 active:scale-[.98] ${envoi ? 'pointer-events-none opacity-60' : ''}`}
                 >
-                  {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : <>Payer {formatPrix(tarif.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
+                  {envoi ? <Spinner className="h-5 w-5 border-wave-dark/25 border-t-wave-dark" /> : <>Payer {formatPrix(choisi.prix)} avec <span className="font-extrabold tracking-tight">Wave</span></>}
                 </a>
               )}
               {!data.paiement_simule && !complet && (
                 <p className="text-center text-xs text-muted">
                   {data.paiement_automatique
-                    ? `Vous payez ${formatPrix(tarif.prix)} sur Wave, puis votre billet s'affiche automatiquement.`
-                    : `Wave s'ouvre avec le montant de ${formatPrix(tarif.prix)}. Revenez ensuite ici pour recevoir votre billet.`}
+                    ? `Billet ${typeBillet(choisi.type).label} : vous payez ${formatPrix(choisi.prix)} sur Wave, puis votre billet s'affiche automatiquement.`
+                    : `Billet ${typeBillet(choisi.type).label} : Wave s'ouvre avec le montant de ${formatPrix(choisi.prix)}. Revenez ensuite ici pour recevoir votre billet.`}
                 </p>
               )}
               {envoi && data.paiement_simule && <p className="animate-fade-in text-center text-sm text-wave">Paiement Wave en cours…</p>}
