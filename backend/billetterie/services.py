@@ -125,8 +125,8 @@ def vendre_guichet(ev, type_billet, nom='', telephone='', entree_immediate=True)
     return ticket
 
 
-# Billets papier par défaut : tous les Jour J, 100 Prévente
-PAPIER_PREVENTE_PAR_DEFAUT = 100
+# Billets papier par défaut : tous les Jour J, 200 Prévente
+PAPIER_PREVENTE_PAR_DEFAUT = 200
 
 
 @transaction.atomic
@@ -134,7 +134,7 @@ def emettre_billets_physiques(ev, type_billet=TypeBillet.JOUR_J, nombre=None):
     """Émet des billets papier : ils deviennent valides (une seule entrée chacun).
 
     - Jour J : tous les billets disponibles de la série.
-    - Prévente : jusqu'à `nombre` billets papier au total (100 par défaut), pris parmi les
+    - Prévente : jusqu'à `nombre` billets papier au total (200 par défaut), pris parmi les
       derniers numéros (PV-400, PV-399…) pour ne pas croiser la vente en ligne qui part de PV-001.
     Idempotent : les billets déjà émis ou vendus sont conservés.
     Retourne tous les billets papier du type, par numéro.

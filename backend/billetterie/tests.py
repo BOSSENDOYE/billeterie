@@ -253,7 +253,7 @@ class ParcoursTest(TestCase):
     def test_impression_des_200_billets_jour_j(self):
         r = self.imprimer()
         pages = re.findall(rb'/Type\s*/Page[^s]', r.content)
-        self.assertEqual(len(pages), 50)  # 200 billets, 4 par page
+        self.assertEqual(len(pages), 34)  # 200 billets, 6 par page
         papier = Ticket.objects.filter(type='jour_j', physique=True)
         self.assertEqual(papier.count(), 200)
         self.assertFalse(papier.exclude(statut='vendu').exists())
@@ -338,23 +338,37 @@ class ParcoursTest(TestCase):
         self.assertTrue(r.content.startswith(b'%PDF'))
         return r
 
-    def test_cent_billets_prevente_papier(self):
+    def test_deux_cents_billets_prevente_papier(self):
         r = self.imprimer_prevente()
-        self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 25)  # 100 billets, 4 par page
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 34)  # 200 billets, 6 par page
         papier = Ticket.objects.filter(type='prevente', physique=True)
-        self.assertEqual(papier.count(), 100)
-        self.assertEqual(sorted(papier.values_list('numero', flat=True))[:2], [301, 302])
+        self.assertEqual(papier.count(), 200)
+        self.assertEqual(sorted(papier.values_list('numero', flat=True))[:2], [201, 202])
         self.assertFalse(Ticket.objects.filter(type='jour_j', physique=True).exists())
-        # Réimpression : toujours les mêmes 100 billets
+        # Réimpression : toujours les mêmes 200 billets
         self.imprimer_prevente()
-        self.assertEqual(Ticket.objects.filter(type='prevente', physique=True).count(), 100)
+        self.assertEqual(Ticket.objects.filter(type='prevente', physique=True).count(), 200)
+
+    def test_complement_prevente_un_seul_pdf(self):
+        self.imprimer_prevente(nombre=100)  # premier tirage : PV-301 à PV-400
+        anciens = {t.pk: t.qr_payload for t in Ticket.objects.filter(type='prevente', physique=True)}
+        r = self.imprimer_prevente()  # complément : PV-201 à PV-300, PDF des 200
+        self.assertEqual(len(re.findall(rb'/Type\s*/Page[^s]', r.content)), 34)  # 200 billets, 6 par page
+        papier = Ticket.objects.filter(type='prevente', physique=True)
+        numeros = sorted(papier.values_list('numero', flat=True))
+        self.assertEqual((len(numeros), numeros[0], numeros[-1]), (200, 201, 400))
+        # Les anciens billets gardent leurs QR codes, et les nouveaux passent au scanner
+        self.assertEqual({t.pk: t.qr_payload for t in papier.filter(pk__in=anciens)}, anciens)
+        for numero in (201, 400):
+            t = Ticket.objects.get(type='prevente', numero=numero)
+            self.assertEqual(self.post('/api/staff/scan', {'qr': t.qr_payload}, **STAFF).json()['resultat'], 'valide')
 
     def test_vente_en_ligne_continue_apres_impression_prevente(self):
         self.imprimer_prevente()
         ticket = self.client.get(f'/api/tickets/{self.acheter()}').json()['ticket']
         self.assertEqual((ticket['code'], ticket['physique']), ('PV-001', False))
         pv = self.client.get('/api/staff/stats', **STAFF).json()['stats']['par_type']['prevente']
-        self.assertEqual((pv['physiques'], pv['restants']), (100, 299))
+        self.assertEqual((pv['physiques'], pv['restants']), (200, 199))
 
     def test_billet_papier_prevente_scanne(self):
         self.imprimer_prevente()

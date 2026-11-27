@@ -107,7 +107,7 @@ const SERIES = {
   jour_j: { titre: 'Billets Jour J à imprimer', nom: 'Jour J', cadre: 'border-ruby/40', bouton: 'border-ruby/60 text-ruby-light', accent: 'text-ruby-light' },
   prevente: { titre: 'Billets Prévente à imprimer', nom: 'Prévente', cadre: 'border-gold/40', bouton: 'border-gold/60 text-gold-light', accent: 'text-gold-light' },
 }
-const PAPIER_PREVENTE = 100
+const PAPIER_PREVENTE = 200
 
 /** Billets vendus en papier (Jour J ou Prévente) : impression, remise à zéro des tests (Jour J), design. */
 export default function BilletsPapier({ evenement: ev, serie, onChange, type = 'jour_j' }) {
@@ -137,12 +137,23 @@ export default function BilletsPapier({ evenement: ev, serie, onChange, type = '
     }
   }
 
+  // Tirage déjà commencé mais incomplet (ex. 100 préventes imprimées sur 200) : billets à ajouter
+  const manquants = dejaImprimes ? Math.max(0, nombre - serie.physiques) : 0
+
   function telecharger() {
-    const message = dejaImprimes
-      ? `Télécharger le PDF des billets ${conf.nom} ? (mêmes billets, mêmes QR codes)`
-      : `Émettre ${nombre} billets ${conf.nom} en papier ?` +
-        (jourJ ? '' : `\n\nIls sont pris sur les places de prévente (numéros PV-${String(ev.quota_prevente - nombre + 1).padStart(3, '0')} à PV-${ev.quota_prevente}) et ne seront plus vendus en ligne.`) +
-        "\n\nIls deviennent valides tout de suite : gardez-les en lieu sûr jusqu'à leur vente."
+    const plages = jourJ ? '' : `\n\nNuméros PV-${String(ev.quota_prevente - nombre + 1).padStart(3, '0')} à PV-${ev.quota_prevente}, pris sur les places de prévente : ils ne seront plus vendus en ligne.`
+    let message
+    if (manquants > 0) {
+      message =
+        `Émettre ${manquants} billets ${conf.nom} de plus et télécharger un seul PDF avec les ${nombre} billets (6 par page) ?` +
+        plages +
+        `\n\nLes ${serie.physiques} billets déjà émis gardent leurs QR codes.`
+    } else if (dejaImprimes) {
+      message = `Télécharger le PDF des ${serie.physiques} billets ${conf.nom} ? (mêmes billets, mêmes QR codes)`
+    } else {
+      message =
+        `Émettre ${nombre} billets ${conf.nom} en papier ?` + plages + "\n\nIls deviennent valides tout de suite : gardez-les en lieu sûr jusqu'à leur vente."
+    }
     if (confirm(message)) action('pdf', () => api.billetsPapierPdf(type))
   }
 
@@ -164,7 +175,7 @@ export default function BilletsPapier({ evenement: ev, serie, onChange, type = '
         <div className="max-w-xl">
           <h2 className="font-semibold">{conf.titre}</h2>
           <p className="mt-1 text-sm text-muted">
-            PDF de {nombre} billets ({formatPrix(prix)}), 4 grands billets par page A4 avec traits de coupe. Chaque QR code ne permet qu'une seule
+            PDF de {nombre} billets ({formatPrix(prix)}), 6 billets par page A4 avec traits de coupe. Chaque QR code ne permet qu'une seule
             entrée.{!jourJ && ' Les billets Prévente vendus en ligne ne changent pas.'}
           </p>
           <p className="mt-2 text-sm">
@@ -184,7 +195,11 @@ export default function BilletsPapier({ evenement: ev, serie, onChange, type = '
           )}
           <button onClick={telecharger} disabled={!!envoi} className={`${btn.ghost} py-2.5 text-sm ${conf.bouton}`}>
             {envoi === 'pdf' ? <Spinner className="h-4 w-4" /> : <IconDownload className="h-4 w-4" />}
-            {dejaImprimes ? 'Télécharger le PDF' : 'Télécharger les billets (PDF)'}
+            {manquants > 0
+              ? `Ajouter ${manquants} billets et télécharger les ${nombre} (PDF)`
+              : dejaImprimes
+                ? 'Télécharger le PDF'
+                : 'Télécharger les billets (PDF)'}
           </button>
           <button onClick={() => setEditeur((v) => !v)} className={`${btn.ghost} py-2.5 text-sm`}>
             {editeur ? 'Fermer le design' : 'Modifier le design'}

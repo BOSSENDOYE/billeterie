@@ -1,4 +1,4 @@
-"""PDF des billets papier (Jour J et Prévente) : 4 grands billets (121 x 68 mm) par page A4, avec repères de coupe.
+"""PDF des billets papier (Jour J et Prévente) : 6 billets (97 x 54 mm) par page A4, avec repères de coupe.
 
 Même apparence que le billet de la plateforme : fond sombre, photo de l'artiste, nom en dégradé,
 bloc date, souche avec bandeau et QR code — rubis pour le Jour J, or pour la Prévente.
@@ -31,9 +31,9 @@ PALETTES = {
 }
 
 # Le billet est dessiné sur un gabarit de 93 x 52 mm puis agrandi d'ECHELLE à l'impression
-# (1,3 → 121 x 68 mm). Gabarit de page : 1 colonne x 4 lignes, billets séparés de 3 mm.
-ECHELLE = 1.3
-COLONNES, LIGNES = 1, 4
+# (1,04 → 97 x 54 mm). Gabarit de page : 2 colonnes x 3 lignes (6 billets), séparés de 3 mm.
+ECHELLE = 1.04
+COLONNES, LIGNES = 2, 3
 L_BASE, H_BASE = 93 * mm, 52 * mm
 L_BILLET, H_BILLET = L_BASE * ECHELLE, H_BASE * ECHELLE
 ESPACE = 3 * mm

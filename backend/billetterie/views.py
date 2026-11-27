@@ -497,7 +497,10 @@ def _pdf(contenu, nom):
 @staff_requis
 @require_POST
 def staff_billets_physiques(request):
-    """Émet les billets papier d'un type (?type=jour_j|prevente, ?nombre= pour la prévente) et renvoie le PDF."""
+    """Émet les billets papier d'un type (?type=jour_j|prevente, ?nombre= pour la prévente) et renvoie le PDF.
+
+    Le PDF contient toujours tous les billets papier du type (anciens et nouveaux), 6 par page.
+    """
     from .impression import generer_pdf
 
     ev, err = evenement_ou_404()
